@@ -1,0 +1,27 @@
+{
+  "meta": {"title": "Gunpowder from scratch", "domain": "chemistry", "cost_unit": "days", "built": "2026-10-28"},
+  "nodes": [
+    {"id": "fire", "label": "Controlled fire", "kind": "capability", "status": "unlocked", "cost": 0},
+    {"id": "wood", "label": "Wood", "kind": "resource", "status": "unlocked", "cost": 0},
+    {"id": "charcoal", "label": "Charcoal", "kind": "artifact", "cost": 2},
+    {"id": "cave_nitrate", "label": "Cave nitrate deposit", "kind": "resource", "status": "untapped", "cost": 6, "holders": ["Limestone cave site"]},
+    {"id": "urine_pit", "label": "Fermentation pit nitrate", "kind": "process", "cost": 20},
+    {"id": "saltpeter", "label": "Saltpeter", "kind": "artifact", "cost": 3},
+    {"id": "hot_spring", "label": "Sulfur hot spring", "kind": "resource", "status": "untapped", "cost": 4, "holders": ["Volcanic hot spring"], "geo": {"lat": 0, "lon": 0}},
+    {"id": "sulfur", "label": "Refined sulfur", "kind": "artifact", "cost": 2},
+    {"id": "ratio", "label": "Mixing ratio", "kind": "knowledge", "cost": 5, "confidence": "high"},
+    {"id": "gunpowder", "label": "Gunpowder", "kind": "artifact", "cost": 1}
+  ],
+  "edges": [
+    {"from": "fire", "to": "charcoal", "type": "energy"},
+    {"from": "wood", "to": "charcoal", "type": "material"},
+    {"from": "cave_nitrate", "to": "saltpeter", "type": "material", "alt_group": "nitrate_source"},
+    {"from": "urine_pit", "to": "saltpeter", "type": "material", "alt_group": "nitrate_source"},
+    {"from": "hot_spring", "to": "sulfur", "type": "material"},
+    {"from": "fire", "to": "sulfur", "type": "energy"},
+    {"from": "charcoal", "to": "gunpowder", "type": "material"},
+    {"from": "saltpeter", "to": "gunpowder", "type": "material"},
+    {"from": "sulfur", "to": "gunpowder", "type": "material"},
+    {"from": "ratio", "to": "gunpowder", "type": "knowledge"}
+  ]
+}
