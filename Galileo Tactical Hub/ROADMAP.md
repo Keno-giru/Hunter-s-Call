@@ -45,3 +45,7 @@ Dated, scoped verdicts with numbers. Newest last.
   tracks_per_player 1.53 (baseline 1.50, +0.03). Both are deterministic across two runs and unaffected by
   the OpenCV version. Purity is better and fragmentation slightly worse than the recorded baseline.
   Re-baselining needs Keno's approval; not done.
+- 2026-11-13, T0 (Keno approved): T0 synthetic tracking gates changed from two-sided ("within 0.02 of
+  baseline") to one-sided non-regression, same baselines and tolerance. Rerun: 10/11. track_purity 0.890
+  now PASS (>= 0.849); tracks_per_player 1.53 still FAIL (<= 1.52): a real 0.03 fragmentation regression
+  against the recorded baseline. Two-sided run kept as `eval/results/2026-11-13_T0_run2_twosided.json`.

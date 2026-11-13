@@ -17,14 +17,19 @@ Runner: `python eval/run.py --track Tn` prints every gate and writes `eval/resul
 | dataset e2e | 19/19 |
 | footage e2e | 14/14 |
 | synthetic cuts | 8000 and 10000 ms, exact |
-| synthetic tracking: position_median_m | within 0.02 m of 0.16 m |
-| synthetic tracking: recall_on_screen | within 0.02 of 0.993 |
-| synthetic tracking: precision | within 0.02 of 0.934 |
-| synthetic tracking: team_accuracy | within 0.02 of 0.998 |
-| synthetic tracking: track_purity | within 0.02 of 0.869 |
-| synthetic tracking: tracks_per_player | within 0.02 of 1.5 |
+| synthetic tracking: position_median_m | <= 0.18 m (baseline 0.16 + 0.02) |
+| synthetic tracking: recall_on_screen | >= 0.973 (baseline 0.993 - 0.02) |
+| synthetic tracking: precision | >= 0.914 (baseline 0.934 - 0.02) |
+| synthetic tracking: team_accuracy | >= 0.978 (baseline 0.998 - 0.02) |
+| synthetic tracking: track_purity | >= 0.849 (baseline 0.869 - 0.02) |
+| synthetic tracking: tracks_per_player | <= 1.52 (baseline 1.5 + 0.02) |
 
 (Names are the keys of `datasets/matches/video-synth-broadcast/eval.json`.)
+
+Amended 2026-11-13, approved by Keno: the tracking gates were two-sided ("within 0.02 of baseline"),
+which failed track_purity 0.890 for being better than baseline. They are now one-sided
+non-regression gates (fail only when worse than baseline by more than 0.02), as T4 already is.
+Baselines and the 0.02 tolerance are unchanged. The original two-sided run stays on record.
 
 Reported, no gate in T0: auto keys vs truth (baseline 26 keys, median 1.7 px, max 3.4 px), overlay every
 frame (baseline median 2.05 px, p95 9.5 px, max 21.6 px). These become gates in T7.

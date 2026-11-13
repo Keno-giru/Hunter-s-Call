@@ -1,6 +1,6 @@
 {
   "track": "T0",
-  "date": "2026-11-13T07:24:54",
+  "date": "2026-11-13T07:31:33",
   "pass": false,
   "gates": [
     {
@@ -43,42 +43,42 @@
     },
     {
       "gate": "synthetic tracking: position_median_m",
-      "threshold": "0.16 +/- 0.02",
+      "threshold": "<= 0.18",
       "result": 0.158,
       "status": "PASS",
       "evidence": "datasets/matches/video-synth-broadcast/eval.json"
     },
     {
       "gate": "synthetic tracking: recall_on_screen",
-      "threshold": "0.993 +/- 0.02",
+      "threshold": ">= 0.973",
       "result": 0.996,
       "status": "PASS",
       "evidence": "datasets/matches/video-synth-broadcast/eval.json"
     },
     {
       "gate": "synthetic tracking: precision",
-      "threshold": "0.934 +/- 0.02",
+      "threshold": ">= 0.914",
       "result": 0.948,
       "status": "PASS",
       "evidence": "datasets/matches/video-synth-broadcast/eval.json"
     },
     {
       "gate": "synthetic tracking: team_accuracy",
-      "threshold": "0.998 +/- 0.02",
+      "threshold": ">= 0.978",
       "result": 0.998,
       "status": "PASS",
       "evidence": "datasets/matches/video-synth-broadcast/eval.json"
     },
     {
       "gate": "synthetic tracking: track_purity",
-      "threshold": "0.869 +/- 0.02",
+      "threshold": ">= 0.849",
       "result": 0.89,
-      "status": "FAIL",
+      "status": "PASS",
       "evidence": "datasets/matches/video-synth-broadcast/eval.json"
     },
     {
       "gate": "synthetic tracking: tracks_per_player",
-      "threshold": "1.5 +/- 0.02",
+      "threshold": "<= 1.52",
       "result": 1.53,
       "status": "FAIL",
       "evidence": "datasets/matches/video-synth-broadcast/eval.json"

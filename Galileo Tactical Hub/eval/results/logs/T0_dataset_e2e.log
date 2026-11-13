@@ -19,5 +19,5 @@ PASS library page links matches and clips  [3 links]
 PASS no page errors
 
 19/19 gates passed
-127.0.0.1 - - [13/Nov/2026 07:24:36] "GET /favicon.ico HTTP/1.1" 404 -
-127.0.0.1 - - [13/Nov/2026 07:24:40] "GET /datasets/nope.ghp.json HTTP/1.1" 404 -
+127.0.0.1 - - [13/Nov/2026 07:31:15] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [13/Nov/2026 07:31:19] "GET /datasets/nope.ghp.json HTTP/1.1" 404 -

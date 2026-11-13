@@ -26,8 +26,9 @@ GT = HUB / "tests/e2e/out/broadcast/broadcast_gt.json"
 TRACK_EVAL = HUB / "datasets/matches/video-synth-broadcast/eval.json"
 
 # T0 baseline (AGENT_PROMPT.md section 2.3); tolerance 0.02 per GATES.md
-T0_TRACKING = {"position_median_m": 0.16, "recall_on_screen": 0.993, "precision": 0.934, "team_accuracy": 0.998,
-               "track_purity": 0.869, "tracks_per_player": 1.5}
+# one-sided non-regression (GATES.md, amended 2026-11-13): +1 = higher is better, -1 = lower is better
+T0_TRACKING = {"position_median_m": (0.16, -1), "recall_on_screen": (0.993, 1), "precision": (0.934, 1),
+               "team_accuracy": (0.998, 1), "track_purity": (0.869, 1), "tracks_per_player": (1.5, -1)}
 T0_TOL = 0.02
 
 
@@ -111,10 +112,11 @@ def t0(args):
     if TRACK_EVAL.exists():
         ev = json.loads(TRACK_EVAL.read_text())
         measured["tracking"] = ev
-        for k, base in T0_TRACKING.items():
+        for k, (base, sign) in T0_TRACKING.items():
             v = ev.get(k)
-            ok = v is not None and abs(float(v) - base) <= T0_TOL + 1e-9
-            gate(board, f"synthetic tracking: {k}", f"{base} +/- {T0_TOL}", v, ok,
+            limit = round(base - sign * T0_TOL, 6)
+            ok = v is not None and sign * (float(v) - limit) >= -1e-9
+            gate(board, f"synthetic tracking: {k}", f"{'>=' if sign > 0 else '<='} {limit}", v, ok,
                  str(TRACK_EVAL.relative_to(HUB)).replace("\\", "/"))
     else:
         gate(board, "synthetic tracking", "eval.json present", "missing", False, "")
