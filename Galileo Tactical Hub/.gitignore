@@ -1,0 +1,4 @@
+tests/e2e/out/
+datasets/
+__pycache__/
+*.pyc

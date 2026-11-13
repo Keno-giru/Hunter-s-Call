@@ -1,0 +1,65 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Galileo Tactical Hub</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="css/hub.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+<div id="hub" class="hub" data-view="3d">
+  <header id="hub-top" class="hub-top"></header>
+  <aside id="hub-left" class="hub-left" aria-label="Selection and units"></aside>
+  <main id="hub-center" class="hub-center">
+    <div id="stage3d" class="stage stage3d"></div>
+    <div id="stage2d" class="stage stage2d"></div>
+    <div id="stage-video" class="stage stage-video"></div>
+    <div id="stage-hud" class="stage-hud"></div>
+    <div id="hub-toolbar" class="hub-toolbar" aria-label="Drawing tools"></div>
+  </main>
+  <aside id="hub-right" class="hub-right" aria-label="Metrics"></aside>
+  <footer id="hub-bottom" class="hub-bottom" aria-label="Timeline"></footer>
+  <nav id="hub-tabs" class="hub-tabs" role="tablist" aria-label="Panels">
+    <button type="button" role="tab" data-tab="left" aria-controls="hub-left" aria-selected="true">Match</button>
+    <button type="button" role="tab" data-tab="right" aria-controls="hub-right" aria-selected="false" tabindex="-1">Analysis</button>
+  </nav>
+  <div id="hub-scrim" class="hub-scrim" hidden></div>
+</div>
+<div id="hub-modal" class="hub-modal" hidden></div>
+<!--HUB_PACK-->
+<script type="module">
+import { createApp } from "./js/core.js";
+import { loadReplay } from "./js/data.js";
+const $ = (id) => document.getElementById(id);
+const ctx = createApp({ mounts: { root: $("hub"), top: $("hub-top"), left: $("hub-left"), center: $("hub-center"),
+  stage3d: $("stage3d"), stage2d: $("stage2d"), video: $("stage-video"), hud: $("stage-hud"), toolbar: $("hub-toolbar"),
+  right: $("hub-right"), bottom: $("hub-bottom"), modal: $("hub-modal") } });
+window.__hub = ctx;                                    // test hook (Playwright)
+const MODULES = ["shell", "pitch3d", "entities3d", "board2d", "timeline", "units", "analytics", "drawing", "footage"];
+window.__hubModules = {};
+for (const m of MODULES) {
+  try { const mod = await import(`./js/${m}.js`); await mod.init?.(ctx); window.__hubModules[m] = "ok"; }
+  catch (e) { console.error(`[hub] module ${m} failed`, e); window.__hubModules[m] = String(e); }
+}
+// ?pack=<relative path to a .ghp.json>&footage=<relative path to a video>  (same origin only: the hub never fetches from the network)
+const qs = new URLSearchParams(location.search);
+const rel = (u) => typeof u === "string" && u.trim() !== "" && !/^[a-z][a-z0-9+.-]*:/i.test(u.trim()) && !u.trim().startsWith("//") && !u.includes("\\");
+const emb = document.getElementById("hub-pack");
+const want = qs.get("pack");
+const src = emb ? JSON.parse(emb.textContent) : rel(want) ? want : "data/1925299.full.ghp.json";
+let replay;
+try { replay = await loadReplay(src); }
+catch (e) {
+  console.error(`[hub] pack ${src} failed`, e);
+  if (src === want) { ctx.bus.emit("toast", { text: `Could not load ${want}: ${e.message}. Showing the sample match.` }); replay = await loadReplay("data/1925299.full.ghp.json"); }
+  else throw e;
+}
+ctx.store.set("replay", replay);
+ctx.start();
+const fp = qs.get("footage");
+if (rel(fp)) {
+  window.__hubFootage = ctx.need("footage").then((f) => f.open(fp)).then(() => "ok", (e) => String(e));
+  if (qs.get("view") === "video") window.__hubFootage.then(() => ctx.need("footage")).then((f) => f.setMode("full"));
+}
+window.__hubReady = true;
+</script>
+
+</body></html>
