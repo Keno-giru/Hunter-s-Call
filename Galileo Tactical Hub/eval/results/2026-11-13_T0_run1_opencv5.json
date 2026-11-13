@@ -1,0 +1,132 @@
+{
+  "track": "T0",
+  "date": "2026-11-13T07:23:38",
+  "pass": false,
+  "gates": [
+    {
+      "gate": "test_toolkit",
+      "threshold": "33/33",
+      "result": "33/33",
+      "status": "PASS",
+      "evidence": "eval/results/logs/T0_test_toolkit.log"
+    },
+    {
+      "gate": "unit (calib + shots + warp)",
+      "threshold": "77/77",
+      "result": "77/77",
+      "status": "PASS",
+      "evidence": "eval/results/logs/T0_test_calib.log, eval/results/logs/T0_test_shots.log, eval/results/logs/T0_test_warp.log"
+    },
+    {
+      "gate": "dataset_e2e",
+      "threshold": "19/19",
+      "result": "19/19",
+      "status": "PASS",
+      "evidence": "eval/results/logs/T0_dataset_e2e.log"
+    },
+    {
+      "gate": "footage_e2e",
+      "threshold": "14/14",
+      "result": "14/14",
+      "status": "PASS",
+      "evidence": "eval/results/logs/T0_footage_e2e.log"
+    },
+    {
+      "gate": "synthetic cuts",
+      "threshold": "[8000, 10000] ms exact",
+      "result": [
+        8000,
+        10000
+      ],
+      "status": "PASS",
+      "evidence": "eval/results/logs/T0_score_keys.log"
+    },
+    {
+      "gate": "synthetic tracking: position_median_m",
+      "threshold": "0.16 +/- 0.02",
+      "result": 0.18,
+      "status": "PASS",
+      "evidence": "datasets/matches/video-synth-broadcast/eval.json"
+    },
+    {
+      "gate": "synthetic tracking: recall_on_screen",
+      "threshold": "0.993 +/- 0.02",
+      "result": 0.996,
+      "status": "PASS",
+      "evidence": "datasets/matches/video-synth-broadcast/eval.json"
+    },
+    {
+      "gate": "synthetic tracking: precision",
+      "threshold": "0.934 +/- 0.02",
+      "result": 0.948,
+      "status": "PASS",
+      "evidence": "datasets/matches/video-synth-broadcast/eval.json"
+    },
+    {
+      "gate": "synthetic tracking: team_accuracy",
+      "threshold": "0.998 +/- 0.02",
+      "result": 0.998,
+      "status": "PASS",
+      "evidence": "datasets/matches/video-synth-broadcast/eval.json"
+    },
+    {
+      "gate": "synthetic tracking: track_purity",
+      "threshold": "0.869 +/- 0.02",
+      "result": 0.89,
+      "status": "FAIL",
+      "evidence": "datasets/matches/video-synth-broadcast/eval.json"
+    },
+    {
+      "gate": "synthetic tracking: tracks_per_player",
+      "threshold": "1.5 +/- 0.02",
+      "result": 1.53,
+      "status": "FAIL",
+      "evidence": "datasets/matches/video-synth-broadcast/eval.json"
+    }
+  ],
+  "measured": {
+    "browser": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "keys": {
+      "keys": 90,
+      "cuts": [
+        8000,
+        10000
+      ],
+      "gt_cuts": [
+        8000,
+        10000
+      ],
+      "median_px": 2.41,
+      "p95_px": 6.8,
+      "max_px": 10.94,
+      "worst": [
+        [
+          5600,
+          10.9
+        ],
+        [
+          5320,
+          8.0
+        ],
+        [
+          6000,
+          7.8
+        ]
+      ]
+    },
+    "overlay": "{\"label\": \"auto+flow\", \"frames\": 500, \"covered\": 450, \"uncovered\": 50, \"median_px\": 2.3, \"p95_px\": 6.86, \"max_px\": 21.88, \"modes\": {\"key\": 90, \"lerp\": 352, \"extrapolate\": 4, \"hold\": 4}}",
+    "tracking": {
+      "frames": 250,
+      "matched": 2521,
+      "position_rmse_m": 0.316,
+      "position_median_m": 0.18,
+      "recall_on_screen": 0.996,
+      "precision": 0.948,
+      "track_purity": 0.89,
+      "tracks_per_player": 1.53,
+      "team_accuracy": 0.998,
+      "video_players": 40,
+      "provider_players_seen": 19
+    }
+  }
+}

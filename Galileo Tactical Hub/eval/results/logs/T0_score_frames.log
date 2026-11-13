@@ -1,0 +1,1 @@
+{"label": "auto+flow", "frames": 500, "covered": 450, "uncovered": 50, "median_px": 2.26, "p95_px": 6.86, "max_px": 21.88, "modes": {"key": 90, "lerp": 352, "extrapolate": 4, "hold": 4}}

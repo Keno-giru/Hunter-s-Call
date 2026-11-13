@@ -1,0 +1,23 @@
+PASS hub modules load
+PASS footage opened from ?footage=  [ok]
+PASS ?pack= loads the dataset pack  [{"id": "metrica-sample-1", "n": 72503}]
+PASS clip.json keys imported  [90 vs 90]
+PASS clip.json cuts imported  [[8000, 10000]]
+PASS sync: kick-off frame plays at 3.0 s of video  [3.000]
+PASS hub H(t) matches the camera (5 moments, RMS px)  [worst 10.94 px]
+PASS no calibration inside the close-up shot  [None]
+PASS overlay warps on the GPU  [gl]
+PASS export keeps tool fields (labels, provenance)
+PASS export carries keys, cuts and sync  [{"offset": 2.96, "offset2": null, "rate": 1, "kickoff_s": 3, "kickoff2_s": null}]
+PASS export marks the calibration size  [[1280, 720]]
+PASS import rescales keys from another resolution  [1.78 px]
+PASS local edits are stored per video path  [['galileo.hub.footage.clip:/datasets/matches/metrica-sample-1/footage/synth-broadcast/proxy.mp4']]
+PASS video-derived pack loads  [{"src": "video", "nP": 40}]
+PASS video pack shares the clip's clock  [frame 69.99999868870047, video 5.600 s]
+PASS missing ?pack= falls back to the sample
+PASS library page links matches and clips  [3 links]
+PASS no page errors
+
+19/19 gates passed
+127.0.0.1 - - [13/Nov/2026 07:24:36] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [13/Nov/2026 07:24:40] "GET /datasets/nope.ghp.json HTTP/1.1" 404 -

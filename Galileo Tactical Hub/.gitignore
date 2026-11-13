@@ -2,3 +2,6 @@ tests/e2e/out/
 datasets/
 __pycache__/
 *.pyc
+.venv/
+models/*.pt
+docs/reference/*transcript*

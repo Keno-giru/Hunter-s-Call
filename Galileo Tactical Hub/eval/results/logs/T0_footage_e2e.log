@@ -1,0 +1,16 @@
+PASS  all hub modules load                                    {"shell": "ok", "pitch3d": "ok", "entities3d": "ok", "board2d": "ok", "timeline": "ok", "units": "ok", "analytics": "ok", "drawing": "ok", "footage": "ok"}
+PASS  keys are stamped at the presented frames                [400, 1600, 2800, 3600]
+PASS  H(t) on a key at 0.42 s (key)                           mode=key err=0.42px (max 1.5)
+PASS  H(t) before the first key at 0.10 s (extrapolate)       mode=extrapolate err=0.66px (max 4)
+PASS  H(t) between keys, pan at 1.02 s (lerp)                 mode=lerp err=0.72px (max 4)
+PASS  H(t) between keys, pan at 1.30 s (lerp)                 mode=lerp err=0.65px (max 4)
+PASS  H(t) between keys, pan + zoom at 3.22 s (lerp)          mode=lerp err=1.64px (max 5)
+PASS  H(t) between keys, pan + zoom at 3.42 s (lerp)          mode=lerp err=2.47px (max 5)
+PASS  no calibration inside the cut shot                      
+PASS  the badge says why                                      
+PASS  a rectangle dragged on the video lands in pitch metres  err=0.045 m
+PASS  the overlay warp has a renderer                         gl
+PASS  cut detection finds both cuts within 2 frames           found [2000, 2520], truth [2000, 2500]
+PASS  no console errors                                       
+
+14/14 gates passed

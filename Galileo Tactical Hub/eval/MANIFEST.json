@@ -1,0 +1,29 @@
+{
+  "format": "galileo-eval-manifest",
+  "version": 1,
+  "frozen": false,
+  "notes": "Skeleton from T0. eval/real is filled and frozen in T1 (AGENT_PROMPT.md section 7). Frozen = read-only; a hash check proves no eval image is in any training set.",
+  "splits": {
+    "synthetic": {
+      "generator": "tests/e2e/gen_broadcast.py",
+      "source_pack": "datasets/matches/metrica-sample-1/pack.ghp.json",
+      "args": ["tests/e2e/out/broadcast", "20"],
+      "source": "Metrica Sports sample data, game 1",
+      "licence": "Metrica Sports sample data: free to use, acknowledge the source in public work",
+      "files": []
+    },
+    "real": {
+      "requirements": ">= 300 frames from >= 3 clips; 2 identity clips >= 30 s; per frame: boxes with class, team per player, >= 6 clicked landmarks",
+      "reviewer": null,
+      "review_date": null,
+      "files": []
+    }
+  },
+  "file_entry": {
+    "file": "relative path",
+    "sha256": "hex",
+    "source": "where it came from",
+    "licence": "licence id or statement",
+    "split": "synthetic | real"
+  }
+}

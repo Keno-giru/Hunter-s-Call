@@ -1,0 +1,37 @@
+++ .venv/Scripts/python tools/galileo.py fetch metrica
+get Sample_Game_1/Sample_Game_1_RawTrackingData_Home_Team.csv
+get Sample_Game_1/Sample_Game_1_RawTrackingData_Away_Team.csv
+get Sample_Game_1/Sample_Game_1_RawEventsData.csv
+get Sample_Game_2/Sample_Game_2_RawTrackingData_Home_Team.csv
+get Sample_Game_2/Sample_Game_2_RawTrackingData_Away_Team.csv
+get Sample_Game_2/Sample_Game_2_RawEventsData.csv
+done: C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\sources\metrica
+++ .venv/Scripts/python tools/galileo.py convert metrica --game 1
+loading Metrica game 1 from local copy ...
+match metrica-sample-1: C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\matches\metrica-sample-1
+open: http://localhost:8000/index.html?pack=datasets/matches/metrica-sample-1/pack.ghp.json   (after `python tools/serve.py`)
+++ .venv/Scripts/python tests/e2e/gen_broadcast.py datasets/matches/metrica-sample-1/pack.ghp.json tests/e2e/out/broadcast 20
+500 frames -> tests\e2e\out\broadcast\broadcast.mp4
+++ .venv/Scripts/python tools/galileo.py ingest tests/e2e/out/broadcast/broadcast.mp4 --match metrica-sample-1 --clip-id synth-broadcast --kickoff 3.0 --i-have-rights --licence 'synthetic test render'
+broadcast.mp4: 1920x1080 25.0 fps 20.0 s (h264)
+proxy -> proxy.mp4 (720p H.264, 1 s keyframes) ...
+detecting camera cuts ...
+  2 cuts
+sync: offset +2.96 s
+labels: 10 events in video time -> labels.csv
+clip: C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\matches\metrica-sample-1\footage\synth-broadcast
+open: http://localhost:8000/index.html?footage=datasets/matches/metrica-sample-1/footage/synth-broadcast/proxy.mp4&pack=datasets/matches/metrica-sample-1/pack.ghp.json
+++ C=datasets/matches/metrica-sample-1/footage/synth-broadcast
+++ cp tests/e2e/out/broadcast/boxes.jsonl datasets/matches/metrica-sample-1/footage/synth-broadcast/
+++ .venv/Scripts/python tools/galileo.py calibrate datasets/matches/metrica-sample-1/footage/synth-broadcast --detections tests/e2e/out/broadcast/detections.jsonl
+{"frames": 40, "keys": 26, "rejected": {"few_points": 4, "ransac": 0, "rms": 0, "near_cut": 2, "collinear": 0, "unstable": 8}, "despiked": []}
+26 keys in datasets\matches\metrica-sample-1\footage\synth-broadcast\clip.json
+++ .venv/Scripts/python tools/galileo.py camera datasets/matches/metrica-sample-1/footage/synth-broadcast
+{"frames": 500, "flow_pairs": 497, "anchors": 26, "new_keys": 78}
+90 keys in datasets\matches\metrica-sample-1\footage\synth-broadcast\clip.json
+++ .venv/Scripts/python tools/galileo.py track datasets/matches/metrica-sample-1/footage/synth-broadcast
+tracking ...
+  500/500
+eval vs provider tracking: {"frames": 250, "matched": 2521, "position_rmse_m": 0.316, "position_median_m": 0.18, "recall_on_screen": 0.996, "precision": 0.948, "track_purity": 0.89, "tracks_per_player": 1.53, "team_accuracy": 0.998, "video_players": 40, "provider_players_seen": 19}
+250 frames, 40 tracked players (40 with stats), 8 possession spells -> C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\matches\video-synth-broadcast
+open: http://localhost:8000/index.html?pack=datasets/matches/video-synth-broadcast/pack.ghp.json&footage=datasets\matches\metrica-sample-1\footage\synth-broadcast/proxy.mp4
