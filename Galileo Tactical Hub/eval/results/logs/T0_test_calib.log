@@ -1,4 +1,4 @@
-   solveHAt: 8.3 us/frame
-   computeHomography (eigen, calibration only): 75.3 us
+   solveHAt: 9.2 us/frame
+   computeHomography (eigen, calibration only): 74.7 us
 
 46 passed, 0 failed

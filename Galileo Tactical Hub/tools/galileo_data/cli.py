@@ -374,8 +374,10 @@ def cmd_track(a):
         raise SystemExit("the clip has no calibration keys: calibrate it (hub, `calibrate`, then `camera`) first")
     say("tracking ...")
     res = V.run(p, bp, home_colour=a.home_colour, home_side=a.home_side, progress=lambda i, n: say(f"  {i}/{n}"))
-    mid = a.match_id or f"video-{sc['clip']['id']}"
-    pack, stats, trows = V.to_pack(res, match_id=mid, fps_out=a.fps)
+    mid = a.match_id or f"video-{sc['clip']['id']}" + ("-persist" if a.persist else "")
+    pack, stats, trows = V.to_pack(res, match_id=mid, fps_out=a.fps, persist=a.persist)
+    if a.persist:
+        say("persistent players: " + json.dumps(pack["meta"]["persistent"]))
     probs = validate(pack)
     if probs:
         say("warnings: " + "; ".join(probs))
@@ -618,6 +620,9 @@ def main(argv=None):
     s.add_argument("--home-colour", help="home shirt colour as #rrggbb (else keepers' sides, else deeper team)")
     s.add_argument("--home-side", choices=["left", "right"], help="the end home defends in this clip")
     s.add_argument("--no-eval", action="store_true", help="skip the comparison with the clip's provider pack")
+    s.add_argument("--persist", action="store_true",
+                   help="persistent players: link fragments into <= 11 per team, keep them on the pitch off camera "
+                        "(estimated, det 0); default match id video-<clip>-persist")
     s.set_defaults(fn=cmd_track)
 
     s = sub.add_parser("clips", help="event-centred training clips from a labelled clip")

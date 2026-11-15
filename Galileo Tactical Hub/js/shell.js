@@ -109,6 +109,8 @@ export function init(ctx) {
 
   const api = {
     version: 1, toast, registerPanel, registerCommand, registerShortcut, setView, run,
+    selectPlayer: (i, toggle) => selectPlayer(i, toggle), quickUnit: (...a) => quickUnit(...a), joinSelection: () => joinSelection(),
+    units: QUICK.slice(),
     openHelp, closeHelp, commands: () => [...commands.values()].map(({ name, help, args }) => ({ name, help, args })),
   };
   ctx.provide("shell", api);
@@ -337,6 +339,7 @@ export function init(ctx) {
       ["/", "Focus the command line"], ["?", "Show or hide this help"], ["1 · 2 · 3 · 4", "View: 3D · 2D · Split · Video"],
       ["Esc", "Close dialogs, leave the command line"], ["↑ ↓ · Tab · Enter", "Pick a suggestion, complete it, run it"],
       ["Click · Shift+click", "Roster: select a player · add or remove"],
+      ["Right-click", "Actions menu: on a player (select, lines) or on the stage (view, draw, board, footage, clips)"],
       ...shortcuts.map((s) => [s.keys, s.help]),
       ...[...commands.values()].filter((c) => c.keys).map((c) => [c.keys, `${c.help} (${c.name})`]),
     ];
@@ -459,33 +462,37 @@ export function init(ctx) {
     if (!matchEl) return;
     rowsByIdx.clear();
     if (!R) { matchEl.replaceChildren(h("p", { class: "sh-empty" }, "Loading replay…")); return; }
-    const blocks = ["home", "away"].map((team) => {
+    const rosterTeam = prefs.get("rosterTeam", "home") === "away" ? "away" : "home";
+    const tabs = h("div", { class: "sh-seg sh-rtabs", role: "tablist", "aria-label": "Team" },
+      ["home", "away"].map((team) => h("button", { type: "button", role: "tab", class: "sh-segbtn", "data-team": team,
+        "aria-selected": String(team === rosterTeam), "aria-pressed": String(team === rosterTeam),
+        onclick: () => { prefs.set("rosterTeam", team); renderRoster(); } },
+        kitSwatch(R.meta[team], "", "sh-kit sh-kit-sm"), R.meta[team]?.short ?? team,
+        h("span", { class: "sh-rcount" }, String(R.players.filter((p) => p.team === team && S.minutes[p.idx] > 0).length)))));
+    const blocks = [rosterTeam].map((team) => {
       const kit = R.meta[team] || {};
       const ps = R.players.filter((p) => p.team === team);
       const active = ps.filter((p) => S.minutes[p.idx] > 0), bench = ps.filter((p) => !(S.minutes[p.idx] > 0));
       const groups = UNIT_ORDER.map((u) => [u, UNIT_NAME[u], active.filter((p) => p.unit === u)]).filter(([, , l]) => l.length);
-      if (bench.length) groups.push(["BENCH", "Not in this replay", bench]);
+      const rows = (list) => h("ul", { class: "sh-rows" }, list.sort((a, b) => roleRank(a.role) - roleRank(b.role) || S.minutes[b.idx] - S.minutes[a.idx]).map((p) => {
+        const share = Math.round(S.detShare[p.idx] * 100), mins = S.minutes[p.idx];
+        const row = h("button", { type: "button", class: "sh-pl", "data-idx": p.idx, "aria-pressed": "false",
+          title: `${p.name} · ${p.role || p.unit} · ${fmtMin(mins)} on pitch in replay · ${mins > 0 ? share + "% detected" : "not on pitch"} · right-click for actions`,
+          onclick: (e) => selectPlayer(p.idx, e.shiftKey || e.metaKey || e.ctrlKey) },
+          kitSwatch(kit, p.number), h("span", { class: "sh-pl-name" }, p.short || p.name), h("span", { class: "sh-pl-role" }, p.role || ""),
+          h("span", { class: "sh-pl-min" }, fmtMin(mins)),
+          h("span", { class: "sh-detbar", "aria-hidden": "true", style: { "--v": `${mins > 0 ? share : 0}%` } }));
+        rowsByIdx.set(p.idx, row);
+        return h("li", null, row);
+      }));
       return h("div", { class: "sh-teamblk", "data-team": team },
-        h("div", { class: "sh-teamhead" }, kitSwatch(kit, "", "sh-kit sh-kit-sm"), h("span", { class: "sh-teamname", title: kit.name }, kit.name ?? team), h("span", { class: "sh-tag" }, kit.short ?? "")),
-        h("div", { class: "sh-quick", role: "group", "aria-label": `${kit.short ?? team} quick units` },
-          QUICK.map(([key, label]) => h("button", { type: "button", class: "sh-qb", "data-team": team, "data-unit": key,
-            title: `Select ${kit.short ?? team} ${label.toLowerCase()} and join them as a trainer's line (Shift adds)`,
-            onclick: (e) => quickUnit(team, key, label, e.shiftKey) }, label))),
         groups.map(([u, name, list]) => h("div", { class: "sh-unit", "data-unit": u },
-          h("div", { class: "sh-unithead" }, h("span", null, u === "BENCH" ? "Bench" : u), h("span", { class: "sh-dim" }, name),
-            u !== "BENCH" ? h("span", { class: "sh-colh" }, "min · det") : null),
-          h("ul", { class: "sh-rows" }, list.sort((a, b) => roleRank(a.role) - roleRank(b.role) || S.minutes[b.idx] - S.minutes[a.idx]).map((p) => {
-            const share = Math.round(S.detShare[p.idx] * 100), mins = S.minutes[p.idx];
-            const row = h("button", { type: "button", class: "sh-pl", "data-idx": p.idx, "aria-pressed": "false",
-              title: `${p.name} · ${p.role || p.unit} · ${fmtMin(mins)} on pitch in replay · ${mins > 0 ? share + "% detected" : "not on pitch"}`,
-              onclick: (e) => selectPlayer(p.idx, e.shiftKey || e.metaKey || e.ctrlKey) },
-            kitSwatch(kit, p.number), h("span", { class: "sh-pl-name" }, p.short || p.name), h("span", { class: "sh-pl-role" }, p.role || ""),
-            h("span", { class: "sh-pl-min" }, fmtMin(mins)),
-            h("span", { class: "sh-detbar", "aria-hidden": "true", style: { "--v": `${mins > 0 ? share : 0}%` } }));
-            rowsByIdx.set(p.idx, row);
-            return h("li", null, row);
-          })))));
+          h("div", { class: "sh-unithead" }, h("span", null, u), h("span", { class: "sh-dim" }, name),
+            h("span", { class: "sh-colh" }, "min · det")), rows(list))),
+        bench.length ? h("details", { class: "sh-unit sh-bench", "data-unit": "BENCH" },
+          h("summary", { class: "sh-unithead" }, h("span", null, "Not on pitch"), h("span", { class: "sh-dim" }, String(bench.length))), rows(bench)) : null);
     });
+    blocks.unshift(tabs);
     matchEl.replaceChildren(...blocks);
     syncRosterSel();
   }
@@ -528,7 +535,7 @@ export function init(ctx) {
   // status footer (bottom of the left panel): legend + data attribution
   const attr = h("p", { class: "sh-attr" }, "");
   mounts.left.append(h("footer", { class: "sh-foot" },
-    h("p", { class: "sh-legend" }, h("span", { class: "sh-dot" }), "detected ", h("span", { class: "sh-dot sh-dot-hollow" }), "det = extrapolated off camera"),
+    h("p", { class: "sh-legend" }, h("span", { class: "sh-dot" }), "seen ", h("span", { class: "sh-dot sh-dot-hollow" }), "ghost = estimated off camera · right-click for actions"),
     attr));
 
   // ------------------------------------------------------------ HUD

@@ -101,3 +101,22 @@ Dated, scoped verdicts with numbers. Newest last.
   landed 177 px (median) off their feet and kit colours were sampled from the wrong crops. Scaled to the
   proxy: alignment median 1.0 px (p90 3.1 px), team labels agree with SoccerNet's on 97.7% of matches.
   Referees are excluded from packs by design (assign_teams), so the hub does not draw them.
+- 2026-11-15, feature (Keno, outside the T-track order; T2 stays paused): persistent players. `track --persist`
+  links each team's fragments into identities (`video_track.link_identities`: min-cost assignment, link cost =
+  distance / reach at 7 m/s + kit, impossible jumps > 2x reach never linked; cap 1 keeper + 10 outfield,
+  soft: no detection dropped, extras counted as over_cap). Every identity stays on the pitch for the whole
+  clip: det 1 seen, det 0 estimated (interpolated between sightings or held at the first/last), drawn as a
+  ghost in 3D. Stats and possession never use holds or gaps > 1.5 s. No pack-format change (det 0 already
+  meant "not seen"). Default `track` unchanged: T0 re-run PASS 11/11 with identical numbers.
+  Synthetic clip (`video-synth-broadcast-persist`): 40 fragments -> 31 identities (22 people, over_cap 9);
+  off-camera estimates vs provider truth: median 7.6 m, p90 19.4 m, 37% within 5 m. Read: identities are
+  only as good as the stitching; shirt numbers are not read, so team-mates can swap identities off camera.
+  Tried and reverted: pushing estimates out of the camera footprint made the median worse (12.2 m),
+  because most in-view ghosts are duplicates of a player already seen under another identity.
+  SNGS-196 preview rebuilt with --persist: 41 fragments -> 25 identities. tests/py/test_persist.py 13/13.
+- 2026-11-15, hub (Keno): right-click menu inside the hub only (`js/contextmenu.js`; text fields keep the
+  browser menu; a right-drag camera pan never opens it). On a player: select, add/remove, join as line, the
+  player's team units. Elsewhere: view, units, draw tools/colour/stroke, board tools, footage display/nudge/
+  sync/cut, clip in/out/save/loop, help. Left panel slimmed: roster in team tabs with players never on the
+  pitch folded away, quick-unit buttons moved to the menu, Board panel removed (its tools stay on the 2D
+  stage row and in the menu), Footage panel sections fold (remembered), DRAW bar folded by default.

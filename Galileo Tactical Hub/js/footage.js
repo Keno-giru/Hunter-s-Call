@@ -275,6 +275,12 @@ const CSS = `
 .gfoot-panel { display: grid; gap: 0.55rem; padding: 0.6rem; font: 400 12px/1.45 var(--mono); color: var(--fg); }
 .gfoot-panel h4 { margin: 0.3rem 0 0; font: 600 11px/1.4 var(--cond); letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-2);
   border-top: 1px solid var(--line); padding-top: 0.5rem; }
+.gfoot-sec { display: grid; gap: 0.55rem; border-top: 1px solid var(--line); padding-top: 0.35rem; }
+.gfoot-sec > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; }
+.gfoot-sec > summary::-webkit-details-marker { display: none; }
+.gfoot-sec > summary::before { content: "▸"; color: var(--fg-3); font-size: 10px; }
+.gfoot-sec[open] > summary::before { content: "▾"; }
+.gfoot-sec > summary h4 { margin: 0; border: 0; padding: 0; }
 .gfoot-note { color: var(--fg-2); font-size: 11px; margin: 0; }
 .gfoot-warn { color: var(--fg); font-size: 11px; margin: 0; border-left: 2px solid var(--warn); padding-left: 0.45rem; }
 .gfoot-row { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
@@ -1001,6 +1007,16 @@ export function init(ctx) {
     ui.calBox = h("div", { style: "display:grid;gap:0.45rem" },
       h("p", { class: "gfoot-note" }, "Pause on a clear frame. Choose a landmark, then click it on the video. Four or more, spread over the pitch. Left = −x end, top = +y touchline, as on the 2D board."),
       h("div", { class: "gfoot-row" }, ui.lm), ui.pts, ui.err, h("div", { class: "gfoot-row" }, ui.apply, ui.clearPts));
+    // sections fold (closed by default, remembered) so the panel stays short; quick controls are also in the right-click menu
+    const sec = (title, openDefault, ...kids) => {
+      const key = "galileo.hub.footage.sec." + title;
+      let open = openDefault === "open";
+      try { const v = localStorage.getItem(key); if (v != null) open = v === "1"; } catch { /* private mode */ }
+      const d = h("details", { class: "gfoot-sec" }, h("summary", null, h("h4", null, title)), ...kids);
+      d.open = open;
+      d.addEventListener("toggle", () => { try { localStorage.setItem(key, d.open ? "1" : "0"); } catch { /* private mode */ } });
+      return d;
+    };
     panel.append(
       h("p", { class: "gfoot-note" }, "Open only footage you have the right to use. Files stay on this machine; nothing is downloaded."),
       h("div", { class: "gfoot-row" }, pickBtn(), h("span", { class: "gfoot-note" }, "or drop a file on the stage")),
@@ -1008,30 +1024,30 @@ export function init(ctx) {
       ui.name,
       h("h4", null, "Display"),
       h("div", { class: "gfoot-row", role: "group", "aria-label": "Footage display mode" }, modeBtn("off", "Off"), modeBtn("pip", "PiP"), modeBtn("full", "Full stage"), ui.mute),
-      h("h4", null, "Sync to match clock"),
+      sec("Sync to match clock", false,
       ui.read,
       h("div", { class: "gfoot-row", role: "group", "aria-label": "Nudge offset" }, nb(-1), nb(-0.1), nb(0.1), nb(1),
         h("button", { class: "gfoot-btn", type: "button", title: "Set the offset so the video frame on screen matches the current match frame", onclick: syncHere }, "Sync here")),
       h("div", { class: "gfoot-row" }, h("label", null, "1st half"), num("offset", "1st-half offset in seconds"), h("label", null, "2nd half"), num("offset2", "2nd-half offset in seconds (empty = same as 1st half)")),
       h("div", { class: "gfoot-row" }, h("label", null, "Rate"), num("rate", "Video seconds per match second (1 = real time)")),
-      h("p", { class: "gfoot-note" }, "Video time = match clock × rate + offset of the current half. Nudges and Sync here act on the half you are in."),
-      h("h4", null, "Calibration over time"),
+      h("p", { class: "gfoot-note" }, "Video time = match clock × rate + offset of the current half. Nudges and Sync here act on the half you are in.")),
+      sec("Calibration over time", false,
       ui.calState, ui.conf,
       h("div", { class: "gfoot-row" }, ui.calBtn, ui.fixed),
       ui.calBox,
       ui.keys,
       h("div", { class: "gfoot-row" }, ui.dropH),
-      h("p", { class: "gfoot-note" }, "Add a key whenever the camera has moved: every second or two while it pans, once per still shot. Between keys the overlay follows the camera; a key never carries across a cut."),
-      h("h4", null, "Camera cuts"),
+      h("p", { class: "gfoot-note" }, "Add a key whenever the camera has moved: every second or two while it pans, once per still shot. Between keys the overlay follows the camera; a key never carries across a cut.")),
+      sec("Camera cuts", false,
       h("div", { class: "gfoot-row" }, ui.cutBtn, ui.uncutBtn, ui.detect),
-      ui.cutRead,
-      h("h4", null, "Clip file (clip.json)"),
+      ui.cutRead),
+      sec("Clip file (clip.json)", false,
       ui.scRead,
       h("div", { class: "gfoot-row" }, ui.scImport, ui.scExport),
-      h("p", { class: "gfoot-note" }, "clip.json carries this clip's sync, calibration keys and cuts. It loads by itself when the video is opened from a dataset folder. After calibrating here, Export and save it next to the video."),
-      h("h4", null, "Overlay on the video"),
+      h("p", { class: "gfoot-note" }, "clip.json carries this clip's sync, calibration keys and cuts. It loads by itself when the video is opened from a dataset folder. After calibrating here, Export and save it next to the video.")),
+      sec("Overlay on the video", false,
       h("div", { class: "gfoot-row", role: "group", "aria-label": "Overlay layers" }, tog("overlays", "Board overlays"), tog("players", "Players"), tog("lines", "Pitch markings")),
-      h("p", { class: "gfoot-note" }, "Board overlays = everything on the 2D board: drawings, unit lines, pitch control, Voronoi, heatmaps. Once a frame is calibrated, the drawing tools work straight on the video."));
+      h("p", { class: "gfoot-note" }, "Board overlays = everything on the 2D board: drawings, unit lines, pitch control, Voronoi, heatmaps. Once a frame is calibrated, the drawing tools work straight on the video.")));
   }
   function refreshPanel() {
     if (!ui.name) return;

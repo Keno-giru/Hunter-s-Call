@@ -184,6 +184,75 @@ def stitch(tracks, *, max_gap_ms=4000, speed_m_s=8.0, slack_m=2.5, colour_tol=28
     return out
 
 
+def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7.0, slack_m=3.0, colour_tol=28.0,
+                    max_cost=2.0, min_seconds=1.0):
+    """Persistent players: chain each team's track fragments into at most 11 identities (1 keeper, 10 outfield).
+
+    A link "B continues A" is possible when B starts after A ends (two fragments on screen together are two
+    people). Its cost is distance / reach, reach = slack + running speed x gap (a long absence may end far
+    away), plus 1 for a different kit; links above max_cost (twice the reach at 7 m/s, i.e. faster than
+    anyone runs) are impossible. All links of a pool (team x keeper/outfield) are chosen at once by
+    minimum-cost assignment, where ending a chain costs a penalty P. P starts at 1 (only links within reach
+    are worth taking) and doubles until the pool has no more chains than its cap; links beyond reach taken
+    that way are counted as forced. The cap is soft: no detection is ever dropped. When more fragments are on
+    screen at once than the cap allows (a stitching error, a substitute, a duplicate box), the pool keeps the
+    extra identities and the report counts them (over_cap).
+    Shirt numbers are not read, so two team-mates swapping places off camera can swap identities: the result
+    is a best estimate, and the pack says so.
+
+    -> (groups, report); groups = [(side, unit, [Track, ...])], home first, keeper first, by first sighting.
+    """
+    from scipy.optimize import linear_sum_assignment
+    groups, rep = [], {"fragments": 0, "links": 0, "forced": 0, "over_cap": 0}
+    col = {tr.id: (np.median(tr.colours, axis=0) if tr.colours else None) for tr in tracks}
+    BIG = 1e9
+    for side in ("home", "away"):
+        for gk in (True, False):
+            pool = sorted((tr for tr in tracks if teams.get(tr.id, ("other",))[0] == side and tr.duration >= min_seconds
+                           and (teams[tr.id][1] == "GK") == gk), key=lambda tr: tr.t[0])
+            n, cap = len(pool), keeper_cap if gk else outfield_cap
+            rep["fragments"] += n
+            if not n:
+                continue
+            C = np.full((n, n), BIG)
+            for i, fa in enumerate(pool):
+                for j, fb in enumerate(pool):
+                    if fb.t[0] < fa.t[-1] or i == j:
+                        continue
+                    gap = (fb.t[0] - fa.t[-1]) / 1000.0
+                    c = math.hypot(fb.x[0] - fa.x[-1], fb.y[0] - fa.y[-1]) / (slack_m + speed_m_s * gap)
+                    ca, cb = col[fa.id], col[fb.id]
+                    if ca is not None and cb is not None and np.linalg.norm(ca - cb) > colour_tol:
+                        c += 1.0
+                    if c <= max_cost:
+                        C[i, j] = c
+            pen = 1.0
+            while True:
+                end = np.full((n, n), BIG)
+                np.fill_diagonal(end, pen)
+                rows, cols = linear_sum_assignment(np.hstack([C, end]))
+                nxt = {int(r): int(c) for r, c in zip(rows, cols) if c < n and C[r, c] < BIG}
+                if n - len(nxt) <= cap or pen > 64:
+                    break
+                pen *= 2
+            prv = {c: r for r, c in nxt.items()}
+            chains = []
+            for i in range(n):
+                if i in prv:
+                    continue
+                ch = [i]
+                while ch[-1] in nxt:
+                    ch.append(nxt[ch[-1]])
+                chains.append(ch)
+            rep["links"] += len(nxt)
+            rep["forced"] += sum(1 for r, c in nxt.items() if C[r, c] > 1.0)
+            rep["over_cap"] += max(0, len(chains) - cap)
+            groups += [(side, "GK" if gk else None, [pool[i] for i in ch]) for ch in chains]
+    groups.sort(key=lambda g: (g[0] != "home", g[1] != "GK", g[2][0].t[0]))
+    rep["identities"] = len(groups)
+    return groups, rep
+
+
 def assign_teams(tracks, *, home_colour=None, home_side=None, outlier=2.5):
     """-> {track id: ("home"|"away"|"referee"|"other", unit or None)}, plus kit colours."""
     from sklearn.cluster import KMeans
@@ -343,8 +412,18 @@ def ball_series(times, balls, max_speed=42.0, max_gap_ms=1000):
     return xy
 
 
-def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None):
-    """Tracking result -> (pack, stats rows, track rows)."""
+SHORT_GAP_MS = 1500          # an estimate across a gap up to this long counts as tracked (stats, possession)
+
+
+def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None, persist=False):
+    """Tracking result -> (pack, stats rows, track rows).
+
+    persist=False: one hub player per (stitched) track; off camera = absent (det -1).
+    persist=True: one hub player per linked identity (link_identities); every player is on the pitch for the
+    whole clip: detected (det 1), estimated between two sightings by straight-line interpolation (det 0), or
+    held at the first / last sighting before and after (det 0). Distance, speed and possession use only
+    detections and short gaps (<= 1.5 s), never long estimates or holds.
+    """
     sc = res["sc"]
     times = np.array(res["times"], float)
     vfps = res["fps"]
@@ -352,25 +431,40 @@ def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None):
     idx = np.arange(0, len(times), step)
     tt = times[idx]
     teams = res["teams"]
-    keep = [tr for tr in res["tracks"] if teams.get(tr.id, ("other",))[0] in ("home", "away") and tr.duration >= min_seconds]
-    keep.sort(key=lambda tr: (teams[tr.id][0] != "home", tr.t[0]))
-    n, nP = len(tt), len(keep)
+    link_rep = None
+    if persist:
+        groups, link_rep = link_identities(res["tracks"], teams, min_seconds=min_seconds)
+    else:
+        keep = [tr for tr in res["tracks"] if teams.get(tr.id, ("other",))[0] in ("home", "away") and tr.duration >= min_seconds]
+        keep.sort(key=lambda tr: (teams[tr.id][0] != "home", tr.t[0]))
+        groups = [(*teams[tr.id], [tr]) for tr in keep]
+    n, nP = len(tt), len(groups)
     pos = np.full((n, nP, 2), np.nan, np.float32)
     det = np.full((n, nP), -1, np.int8)
-    for c, tr in enumerate(keep):
-        tr_t = np.array(tr.t, float)
-        xs, ys = _smooth(tr.x, 3), _smooth(tr.y, 3)
+    tracked = np.zeros((n, nP), bool)                       # detected or a short gap: what stats may use
+    for c, (_, _, frags) in enumerate(groups):
+        tr_t = np.concatenate([np.array(f.t, float) for f in frags])
+        xs = np.concatenate([_smooth(f.x, 3) for f in frags])
+        ys = np.concatenate([_smooth(f.y, 3) for f in frags])
         for k, tv in enumerate(tt):
-            if tv < tr_t[0] - 1 or tv > tr_t[-1] + 1:
+            if not persist and (tv < tr_t[0] - 1 or tv > tr_t[-1] + 1):
                 continue
             j = int(np.searchsorted(tr_t, tv))
             if j < len(tr_t) and abs(tr_t[j] - tv) <= 1:
                 pos[k, c] = (xs[j], ys[j])
                 det[k, c] = 1
-            elif (0 < j < len(tr_t) and tr_t[j] - tr_t[j - 1] <= 1500 and          # short, physically possible gap: interpolate
-                  math.hypot(xs[j] - xs[j - 1], ys[j] - ys[j - 1]) <= 1.0 + 9.0 * (tr_t[j] - tr_t[j - 1]) / 1000):
-                w = (tv - tr_t[j - 1]) / (tr_t[j] - tr_t[j - 1])
-                pos[k, c] = (xs[j - 1] + (xs[j] - xs[j - 1]) * w, ys[j - 1] + (ys[j] - ys[j - 1]) * w)
+                tracked[k, c] = True
+            elif 0 < j < len(tr_t):
+                gap = tr_t[j] - tr_t[j - 1]
+                short = gap <= SHORT_GAP_MS and math.hypot(xs[j] - xs[j - 1], ys[j] - ys[j - 1]) <= 1.0 + 9.0 * gap / 1000
+                if short or persist:                         # short, physically possible gap; or a linked identity
+                    w = (tv - tr_t[j - 1]) / gap
+                    pos[k, c] = (xs[j - 1] + (xs[j] - xs[j - 1]) * w, ys[j - 1] + (ys[j] - ys[j - 1]) * w)
+                    det[k, c] = 0
+                    tracked[k, c] = short
+            elif persist:                                     # before the first or after the last sighting: hold
+                e = 0 if j == 0 else len(tr_t) - 1
+                pos[k, c] = (xs[e], ys[e])
                 det[k, c] = 0
     ball_all = ball_series(res["times"], res["balls"])
     ball = np.c_[ball_all[idx], np.zeros(n)]
@@ -383,7 +477,7 @@ def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None):
             cur, cand, streak = -1, -1, 0
             continue
         d = np.sqrt(((pos[k] - b) ** 2).sum(-1))
-        d = np.where(np.isfinite(d), d, np.inf)
+        d = np.where(np.isfinite(d) & tracked[k], d, np.inf)
         j = int(np.argmin(d)) if nP else -1
         near = j if nP and d[j] <= 1.5 else -1
         if near >= 0 and near == cand:
@@ -409,12 +503,14 @@ def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None):
             views[k] = v
     players = []
     counts = {"home": 0, "away": 0}
-    for tr in keep:
-        side, unit = teams[tr.id]
+    for side, unit, frags in groups:
+        tr = frags[0]
         counts[side] += 1
-        players.append({"id": f"v{tr.id}", "team": side, "number": counts[side], "name": f"{side.title()} track {counts[side]}",
+        players.append({"id": f"v{tr.id}", "team": side, "number": counts[side],
+                        "name": f"{side.title()} {'player' if persist else 'track'} {counts[side]}",
                         "short": f"{side[0].upper()}{counts[side]}", "role": "GK" if unit == "GK" else None, "unit": unit,
-                        "group": None, "starter": True, "video_track": tr.id})
+                        "group": None, "starter": True, "video_track": tr.id,
+                        **({"video_tracks": [f.id for f in frags]} if persist else {})})
     infer_units(pos, players, period)
     events = []
     k = 0
@@ -436,13 +532,17 @@ def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None):
     m = {"source": "video", "match_id": match_id, "pitch": [105, 68],
          "home": team_meta("Home (video)", "home", "HOM", (kits.get("home", "#d64545"), "#ffffff")),
          "away": team_meta("Away (video)", "away", "AWY", (kits.get("away", "#2f6fd6"), "#ffffff")),
-         "detection_note": "det=1 detected on video, 0 interpolated inside a track, -1 not tracked (off camera or lost)",
+         "detection_note": ("det=1 detected on video, 0 estimated: interpolated between sightings of the same linked player, "
+                            "or held at the first/last sighting while off camera (persistent players, best estimate)") if persist else
+                           "det=1 detected on video, 0 interpolated inside a track, -1 not tracked (off camera or lost)",
          "video": {"clip": sc["clip"]["id"], "file": sc["clip"]["file"], "coverage": res["coverage"]}}
+    if persist:
+        m["persistent"] = {**link_rep, "method": "link_identities: 1 keeper + 10 outfield per team, distance / reach + kit"}
     m.update(meta or {})
     dt = step / vfps
     pack = build_pack(meta=m, players=players, fps=1.0 / dt, frame=frame_no, t=t, period=period, pos=pos, det=det,
                       ball=ball, poss=poss, view=views, events=events)
-    stats = player_stats(players, pos, det, dt)
+    stats = player_stats(players, pos, np.where(tracked, det, -1), dt)
     trows = []
     for tr in res["tracks"]:
         side = teams.get(tr.id, ("other",))[0]
@@ -515,6 +615,8 @@ def evaluate(video_pack, provider_pack, sc, *, gate_m=3.0):
     err, matched, prov_in, vid_on = [], 0, 0, 0
     votes = defaultdict(lambda: defaultdict(int))
     team_ok = team_n = 0
+    persistent = bool((video_pack.get("meta") or {}).get("persistent"))
+    est = []                                     # (video player, its estimated position, provider positions, inside view)
     for f in range(v["n"]):
         r = float(v["t"][f])            # the video pack runs on the provider's replay clock (see to_pack)
         if r < rt[0] - 0.1 or r > rt[-1] + 0.1:
@@ -527,7 +629,12 @@ def evaluate(video_pack, provider_pack, sc, *, gate_m=3.0):
             continue
         inside = in_polygon(vx, np.nan_to_num(pp, nan=1e6))
         pi = np.flatnonzero(inside & np.isfinite(pp[:, 0]))
-        von = np.flatnonzero(v["det"][f] >= 0)
+        if persistent:                           # estimates are scored on their own below, never as detections
+            ve = np.flatnonzero(v["det"][f] == 0)
+            if len(ve):
+                vin = in_polygon(vx, v["pos"][f][ve])
+                est += [(int(i), v["pos"][f][i].copy(), pp, bool(b)) for i, b in zip(ve, vin)]
+        von = np.flatnonzero(v["det"][f] == 1) if persistent else np.flatnonzero(v["det"][f] >= 0)
         vi = von[in_polygon(vx, v["pos"][f][von])] if len(von) else von
         prov_in += len(pi)
         vid_on += len(vi)
@@ -551,7 +658,17 @@ def evaluate(video_pack, provider_pack, sc, *, gate_m=3.0):
     for vp, pl in owner.items():
         frag[pl].add(vp)
     e = np.array(err) if err else np.array([np.nan])
-    return {"frames": int(v["n"]), "matched": matched, "position_rmse_m": round(float(np.sqrt(np.nanmean(e ** 2))), 3),
+    extra = {}
+    if persistent:
+        # off-camera estimates vs where the provider says that player really was (owner = majority match)
+        ee = np.array([np.hypot(*(xy - pp[owner[vp]])) for vp, xy, pp, _ in est
+                       if vp in owner and np.isfinite(pp[owner[vp]]).all()]) if est else np.array([])
+        extra = {"estimate_samples": int(len(ee)), "estimate_unscored": int(len(est) - len(ee)),
+                 "estimate_median_m": round(float(np.median(ee)), 2) if len(ee) else None,
+                 "estimate_p90_m": round(float(np.percentile(ee, 90)), 2) if len(ee) else None,
+                 "estimate_within_5m": round(float((ee <= 5).mean()), 3) if len(ee) else None,
+                 "estimates_inside_view": int(sum(1 for *_, b in est if b))}
+    return {**extra, "frames": int(v["n"]), "matched": matched, "position_rmse_m": round(float(np.sqrt(np.nanmean(e ** 2))), 3),
             "position_median_m": round(float(np.nanmedian(e)), 3),
             "recall_on_screen": round(matched / prov_in, 3) if prov_in else None,
             "precision": round(matched / vid_on, 3) if vid_on else None,

@@ -605,6 +605,16 @@ export function init(ctx) {
     + `<div class="gdraw-row">${btn("undo", "Undo  [Ctrl/Cmd+Z]", "undo")}${btn("redo", "Redo  [Shift+Ctrl/Cmd+Z]", "redo")}</div>`
     + btn("clear", "Clear all drawings", "clear");
   root.appendChild(pal);
+  // folded by default (one "DRAW" tab over the stage); tools are also in the right-click menu and on their keys
+  const FOLD_KEY = "galileo.hub.draw.folded";
+  function setFolded(c) {
+    pal.classList.toggle("is-collapsed", c);
+    pal.querySelector(".gdraw-head").setAttribute("aria-expanded", String(!c));
+    try { localStorage.setItem(FOLD_KEY, c ? "1" : "0"); } catch { /* private mode */ }
+  }
+  let folded = true;
+  try { folded = localStorage.getItem(FOLD_KEY) !== "0"; } catch { /* private mode */ }
+  setFolded(folded);
   const hint = document.createElement("div"); hint.className = "gdraw-hint"; hint.hidden = true; root.appendChild(hint);
   pal.addEventListener("click", (e) => {
     const b = e.target.closest("[data-act]"); if (!b) return;
@@ -616,7 +626,7 @@ export function init(ctx) {
     else if (act === "all") setShowAll(!showAll);
     else if (act === "undo") undo(); else if (act === "redo") redo();
     else if (act === "clear") { if (list().length) { clear(); toast("Drawings cleared (Ctrl/Cmd+Z restores)"); } }
-    else if (act === "collapse") { const c = pal.classList.toggle("is-collapsed"); b.setAttribute("aria-expanded", String(!c)); }
+    else if (act === "collapse") setFolded(!pal.classList.contains("is-collapsed"));
     repaint();
   });
   function setColor(c) { color = c; if (selectedId && byId(selectedId)) patch(selectedId, { color: c }); syncUI(); }
@@ -683,7 +693,8 @@ export function init(ctx) {
     undo, redo, remove, select(id) { selectedId = byId(id) ? id : null; syncUI(); repaint(); },
     pin(id, frame = Math.round(store.get("frame") || 0)) { patch(id, { frame }); },
     unpin(id) { const s = byId(id); if (s) { const { frame, ...rest } = s; commit(list().map((x) => (x.id === id ? rest : x))); } },
-    setShowAll, setColor, setDash, showExport, showImport, command: runDraw,
+    setShowAll, setColor, setDash, showExport, showImport, command: runDraw, setFolded,
+    get color() { return color; }, get dash() { return dash; }, toolLabels: TOOLS.map((t) => ({ id: t.id, label: t.label, key: t.key })),
     tools: TOOLS.map((t) => t.id), colors: COLORS.slice(), pinWindowS: PIN_WINDOW_S,
     get tool() { return tool; }, get selected() { return selectedId; }, get showAll() { return showAll; }, get autoPin() { return autoPin; },
   });

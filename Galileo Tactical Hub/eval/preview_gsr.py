@@ -8,7 +8,8 @@ Uses the clip's full 750 frames from datasets/sources/soccernet-gsr/test/<clip>/
 2. calibration keys: the per-frame H fitted to SoccerNet's pitch-line annotations (import_gsr.fit_frame),
    only on frames that pass its checks, never on a frame next to a cut
 3. boxes.jsonl from SoccerNet's hand-made boxes (stand-in for the T2 detector)
-4. the normal `galileo.py track` -> datasets/matches/video-gsr-<clip>/ (a hub pack on the clip's clock)
+4. the normal `galileo.py track --persist` -> datasets/matches/video-gsr-<clip>/ (a hub pack on the clip's clock;
+   persistent players: fragments linked into <= 11 per team, kept on the pitch as estimates while off camera)
 
 Everything lands under datasets/ (gitignored). The clip is an exam clip, so nothing here may ever be used
 for training.
@@ -112,7 +113,7 @@ def main(name):
     print(f"boxes.jsonl: {sum(len(r['boxes']) for r in rows)} boxes over {len(rows)} frames")
 
     # 4. track -> hub pack
-    run(PY, "tools/galileo.py", "track", clip_dir, "--no-eval")
+    run(PY, "tools/galileo.py", "track", clip_dir, "--no-eval", "--persist", "--match-id", f"video-{clip_dir.name}")
     rel = clip_dir.relative_to(HUB).as_posix()
     print(f"\nopen: http://localhost:8000/index.html?pack=datasets/matches/video-{clip_dir.name}/pack.ghp.json"
           f"&footage={rel}/proxy.mp4&view=video   (after `python tools/serve.py`)")

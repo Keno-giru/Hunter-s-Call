@@ -337,16 +337,7 @@ export function init(ctx) {
   const argList = (args) => (Array.isArray(args) ? args : String(args ?? "").trim().split(/\s+/)).filter(Boolean).map((x) => String(x).toLowerCase());
   ctx.need("shell").then((shell) => {
     try {
-      shell.registerPanel?.({
-        id: "board", side: "left", title: "Board",
-        render(host) {
-          const wrap = el("div", "b2d-panel");
-          buildButtons(wrap, true);
-          wrap.lastChild.classList.add("b2d-wide");
-          wrap.append(el("p", "b2d-hint", "Wheel zooms, drag pans, Alt-drag lassos. In board mode drag a player, or a selected group, to move it."));
-          host.append(wrap); syncUi();
-        },
-      });
+      // Board tools live on the 2D stage's own button row and in the right-click menu (no left panel).
       const cmd = (name, help, run) => shell.registerCommand?.({ name, help, run });
       cmd("board", "board on|off|reset - tactics-board mode (drag players)", (args) => {
         const v = argList(args)[0];
@@ -514,6 +505,7 @@ export function init(ctx) {
 
   ctx.provide("board2d", {
     canvas, toPx, fromPx, pickPlayer, requestDraw,
+    get board() { return boardOn(); }, get lasso() { return lasso; },
     // extras (beyond the contract)
     get view() { return { ...view, scale: mpx }; },
     setView, resetView, rotate, flip, zoomAt, setBoard, setLasso, resetPositions,
