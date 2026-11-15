@@ -39,4 +39,11 @@ committed to the public Hunter-s-Call repo (only their sha256 in the manifest).
 - **SoccerTrack drone clip** (Keno is downloading): a second camera type with GNSS metres.
 - Optional: a few dozen frames from a Commons FCUFAN match as an "elevated end view" camera.
 
-Not decided: whether eval/real should include any of Keno's own broadcast recordings.
+## Built (2026-11-15)
+
+SoccerNet-GSR test clips SNGS-129, 137, 143, 190, 196 (games 7, 8, 11) -> `eval/real/gsr-*`, 461 frames
+every 5th frame; identity clips SNGS-137 and SNGS-196. SNGS-119 was fetched but dropped (inconsistent side
+names in its first 10 s). Rebuild: `python eval/import_gsr.py fetch <clips>` then `convert`. The folders
+are gitignored.
+
+Not decided: whether eval/real should include any of Keno's own broadcast recordings, and the SoccerTrack drone clip.

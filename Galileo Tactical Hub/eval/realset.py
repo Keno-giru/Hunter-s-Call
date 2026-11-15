@@ -196,9 +196,12 @@ def qa(root=REAL, only=None, check_files=True):
                     rep["teams"][b["team"]] += 1
         if ident and rows:
             ts = sorted(r["t_ms"] for r in rows)
-            c["span_s"] = round((ts[-1] - ts[0]) / 1000, 2)
-            c["median_step_s"] = round(float(np.median(np.diff(ts))) / 1000, 3) if len(ts) > 1 else None
-            identity_ok += c["span_s"] >= MIN_IDENTITY_S
+            step = float(np.median(np.diff(ts))) / 1000 if len(ts) > 1 else 0.0
+            c["median_step_s"] = round(step, 3)
+            # duration covered = first-to-last span plus one sampling step (750 frames at 25 fps = 30.0 s)
+            c["span_s"] = round((ts[-1] - ts[0]) / 1000 + step, 2)
+            c["max_gap_s"] = round(float(np.max(np.diff(ts))) / 1000, 2) if len(ts) > 1 else None
+            identity_ok += c["span_s"] >= MIN_IDENTITY_S - 1e-6
         c["rms_px"] = {"median": round(float(np.median(c["rms_px"])), 3), "max": round(float(np.max(c["rms_px"])), 3)} if c["rms_px"] else None
         rep["frames"] += len(rows)
         rep["errors"] += len(c["errors"])
@@ -375,7 +378,7 @@ def extract(video, clip_id, source, licence, *, every_s=1.0, dense=False, start_
 # ---------------------------------------------------------------- cli
 def _print_qa(rep):
     for c in rep["clips"]:
-        extra = f", span {c.get('span_s')} s, step {c.get('median_step_s')} s" if c["identity"] else ""
+        extra = f", covers {c.get('span_s')} s, step {c.get('median_step_s')} s, max gap {c.get('max_gap_s')} s" if c["identity"] else ""
         print(f"{c['clip_id']}: {c['frames']} frames, identity={c['identity']}{extra}, clicked-H RMS {c['rms_px']}, "
               f"{len(c['errors'])} errors")
         for e in c["errors"][:20]:

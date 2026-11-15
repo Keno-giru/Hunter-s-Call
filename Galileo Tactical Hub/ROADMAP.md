@@ -67,3 +67,13 @@ Dated, scoped verdicts with numbers. Newest last.
   lines; HF repo GPL-3.0, not gated; single clips fetchable by HTTP range, ~180 MB). Kaggle SoccerTrack/
   TeamTrack are drone/fisheye only. Commons has CC BY 3.0 4K Eredivisie fan-camera matches (end view).
   Third-party frames are gitignored in eval/real.
+- 2026-11-15, T1: eval/real built from SoccerNet-GSR (6 test clips range-downloaded, 1.13 GB, CRC-checked;
+  `eval/import_gsr.py`). Per-frame H fitted to the dataset's named pitch lines and circles (median line
+  residual <= 3 px) with a gross-error guard on the players' labelled pitch positions (<= 50 px: GSR's own
+  positions sit 20-30 px off the feet). Kept: 461 frames, 5 clips, games 7/8/11; identity clips SNGS-137
+  (game 8) and SNGS-196 (game 11), 30.0 s each (max gaps 5.0 s and 2.8 s). SNGS-119 dropped: its first
+  10 s carry side names inconsistent with the view (2 usable frames). QA PASS before review; not frozen.
+- 2026-11-15, T1 finding for Keno: the ">= 6 landmarks" rule drops most midfield frames (only centre spot,
+  halfway top and 4 circle points exist there), biasing the exam toward box views. 83-49 frames per clip
+  skipped for this. Gate unchanged; decision needed.
+- 2026-11-15, T1: identity-clip duration = span + one sampling step (30 s clip reads 30.0 s, not 29.8 s).

@@ -57,6 +57,8 @@ How the T1 gates are measured (`eval/realset.py`, stricter than the brief, never
 label QA also rejects landmarks clicked outside the image and degenerate fits (pitch spread < 2 m or
 image spread < 5 px: collinear clicks otherwise fit with RMS 0); leakage checks sha256 **and** a 64-bit
 dHash (<= 4 bits apart), so re-encoded or resized copies of an eval frame in a training set are caught.
+An identity clip's duration is the first-to-last frame span plus one sampling step (a full 30 s clip of
+750 frames at 25 fps covers 30.0 s; the bare span would read 29.8-29.96 s). Threshold unchanged (2026-11-15).
 
 ## T2. Detector bake-off (proposed)
 

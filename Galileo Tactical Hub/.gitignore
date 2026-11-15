@@ -7,3 +7,5 @@ models/*.pt
 docs/reference/*transcript*
 # third-party exam frames never go to the public repo; their sha256 is in eval/MANIFEST.json
 eval/real/*/frames/
+# SoccerNet-GSR-derived exam clips: rebuild with `eval/import_gsr.py fetch` + `convert` (third-party content)
+eval/real/gsr-*/

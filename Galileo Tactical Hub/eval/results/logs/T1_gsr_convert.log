@@ -1,0 +1,7 @@
+SNGS-119: 2 frames -> eval\real\gsr-SNGS-119 (skipped {'no start': 6, 'too few line points': 0, 'lines': 46, 'feet': 0, 'mirrored': 13, 'few_landmarks': 83})
+SNGS-137: 100 frames -> eval\real\gsr-SNGS-137 (skipped {'no start': 0, 'too few line points': 0, 'lines': 21, 'feet': 10, 'mirrored': 2, 'few_landmarks': 17})
+SNGS-129: 110 frames -> eval\real\gsr-SNGS-129 (skipped {'no start': 0, 'too few line points': 0, 'lines': 7, 'feet': 0, 'mirrored': 2, 'few_landmarks': 31})
+SNGS-143: 60 frames -> eval\real\gsr-SNGS-143 (skipped {'no start': 2, 'too few line points': 0, 'lines': 10, 'feet': 28, 'mirrored': 1, 'few_landmarks': 49})
+SNGS-190: 80 frames -> eval\real\gsr-SNGS-190 (skipped {'no start': 17, 'too few line points': 0, 'lines': 26, 'feet': 0, 'mirrored': 1, 'few_landmarks': 26})
+SNGS-196: 111 frames -> eval\real\gsr-SNGS-196 (skipped {'no start': 0, 'too few line points': 0, 'lines': 11, 'feet': 1, 'mirrored': 1, 'few_landmarks': 26})
+SNGS-196: 111 frames -> eval\real\gsr-SNGS-196 (skipped {'no start': 0, 'too few line points': 0, 'lines': 11, 'feet': 1, 'mirrored': 1, 'few_landmarks': 26})
