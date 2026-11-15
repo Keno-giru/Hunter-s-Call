@@ -49,9 +49,14 @@ frame (baseline median 2.05 px, p95 9.5 px, max 21.6 px). These become gates in 
 | manifest | every file has sha256, source, licence, split, reviewer, date |
 | label QA | box sanity passes; >= 6 landmarks per frame (kept by Keno 2026-11-15); landmark RMS of the clicked H < 3 px on every frame |
 | leakage | zero eval images in any training set (hash check) |
-| sign-off | Keno's review recorded in the manifest |
+| sign-off | Keno's review recorded in the manifest; every frame accepted; per clip a review mode: `full` (every frame checked) or `sample` (spot-check audit) |
 | tooling | `tests/py/test_eval.py` all pass |
 | frozen and unchanged | `realset.py verify`: 0 changed, 0 unrecorded files |
+
+Amended 2026-11-15, approved by Keno: the brief's "Keno reviews and corrects every frame" is relaxed for
+clips whose source labels are human annotations (SoccerNet-GSR): such a clip may be accepted after a
+spot-check audit (`sample`) instead of a full check. The mode is recorded per clip in clip.json and the
+manifest. First use: SNGS-129 and SNGS-196 full, SNGS-137, SNGS-143 and SNGS-190 sample.
 
 How the T1 gates are measured (`eval/realset.py`, stricter than the brief, never looser):
 label QA also rejects landmarks clicked outside the image and degenerate fits (pitch spread < 2 m or

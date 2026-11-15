@@ -86,3 +86,7 @@ Dated, scoped verdicts with numbers. Newest last.
 - 2026-11-15, T1 (Keno): a CVAT job marked "completed" means every frame in it was checked; `cvat.py pull`
   marks all its frames reviewed (provenance "CVAT job completed"). The per-frame `reviewed` tag remains for
   partly reviewed jobs.
+- 2026-11-15, T1 (Keno): review done in CVAT. Full check of every frame: SNGS-129, SNGS-196. Spot-check
+  audit: SNGS-137, SNGS-143, SNGS-190 (frames found accurate; sample size not recorded). The "every frame"
+  rule is relaxed for human-annotated sources; mode recorded per clip (`realset.py review`) and in the
+  manifest at freeze. Note: the sample-audited clips carry SoccerNet's labels with lighter verification.

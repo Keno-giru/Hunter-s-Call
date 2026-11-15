@@ -160,10 +160,17 @@ try:
         for b in r["boxes"]:
             b["team"] = "home" if b["cls"] == "player" else None
     R.write_labels(out, again)
+    try:
+        R.freeze("tester", root=root, manifest=manifest, train_dirs=[train])
+        ok("freeze: refuses a clip without a review mode", False)
+    except SystemExit as e:
+        ok("freeze: refuses a clip without a review mode", "review mode" in str(e), str(e))
+    R.set_review("c1", "sample", "tester", "spot check", root=root)
     nfiles = R.freeze("tester", root=root, manifest=manifest, train_dirs=[train])
     m = json.loads(manifest.read_text(encoding="utf-8"))
     ok("freeze: manifest records files, reviewer and date", m["frozen"] and nfiles == 8 and m["splits"]["real"]["reviewer"] == "tester"
        and m["splits"]["real"]["review_date"], f"{nfiles}")
+    ok("freeze: manifest records the review mode", m["splits"]["real"]["review"]["c1"]["mode"] == "sample")
     ok("freeze: files are read-only", not os.access(out / "labels.jsonl", os.W_OK))
     ok("verify: untouched set passes", R.verify(root, manifest)["pass"])
     lab = out / "labels.jsonl"

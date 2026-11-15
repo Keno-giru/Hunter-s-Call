@@ -159,9 +159,13 @@ def t1(args):
                                                for f in real["files"])
     gate(board, "manifest complete", "every file: sha256, source, licence, split", f"{len(real.get('files', []))} files",
          complete, "eval/MANIFEST.json")
-    gate(board, "Keno sign-off", "reviewer + date in manifest, every frame reviewed",
-         f"{real.get('reviewer')} {real.get('review_date')}, reviewed {rep['reviewed']}/{rep['frames']}",
-         bool(real.get("reviewer")) and bool(real.get("review_date")) and rep["all_reviewed"], "eval/MANIFEST.json")
+    modes = real.get("review") or {}
+    summary = ", ".join(f"{k.replace('gsr-', '')} {v.get('mode')}" for k, v in sorted(modes.items()) if v)
+    gate(board, "Keno sign-off", "reviewer + date; every frame accepted; review mode per clip (full | sample)",
+         f"{real.get('reviewer')} {real.get('review_date')}, reviewed {rep['reviewed']}/{rep['frames']}; {summary or 'no modes'}",
+         bool(real.get("reviewer")) and bool(real.get("review_date")) and rep["all_reviewed"]
+         and len(modes) == len(rep["clips"]) and all(v and v.get("mode") in R.REVIEW_MODES for v in modes.values()),
+         "eval/MANIFEST.json")
     v = R.verify()
     gate(board, "frozen and unchanged", "frozen; 0 changed, 0 unrecorded files",
          f"frozen={v['frozen']}, {len(v['changed'])} changed, {len(v['unrecorded'])} unrecorded", v["pass"], "eval/MANIFEST.json")

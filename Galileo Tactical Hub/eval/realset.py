@@ -18,6 +18,7 @@ Commands:
                                     [--start-s A] [--end-s B] [--identity] [--boxes boxes.jsonl] [--clip-json clip.json]
     python eval/realset.py qa [--clip ID] [--json out.json]
     python eval/realset.py leakage [--train DIR ...]
+    python eval/realset.py review CLIP full|sample [--note TEXT]
     python eval/realset.py freeze --reviewer NAME
     python eval/realset.py verify
 
@@ -53,6 +54,7 @@ IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 MIN_FRAMES, MIN_CLIPS, MIN_IDENTITY_CLIPS, MIN_IDENTITY_S = 300, 3, 2, 30.0
 MIN_LANDMARKS, MAX_LANDMARK_RMS_PX, MIN_SPREAD_M, MIN_SPREAD_PX = 6, 3.0, 2.0, 5.0
 DHASH_MAX_DIST = 4          # near-duplicate threshold (bits of 64)
+REVIEW_MODES = ("full", "sample")   # full = every frame checked; sample = spot-check audit (Keno, 2026-11-15)
 
 
 # ---------------------------------------------------------------- io
@@ -254,20 +256,36 @@ def leakage(train_dirs=None, root=REAL):
             "exact": exact, "near": near, "pass": not exact and not near}
 
 
+def set_review(clip_id, mode, reviewer, note=None, root=REAL):
+    """Record how a clip was reviewed: 'full' (every frame checked) or 'sample' (spot-check audit)."""
+    if mode not in REVIEW_MODES:
+        raise SystemExit(f"mode must be one of {REVIEW_MODES}")
+    mp = Path(root) / clip_id / "clip.json"
+    meta = json.loads(mp.read_text(encoding="utf-8"))
+    meta["review"] = {"mode": mode, "reviewer": reviewer, "date": dt.date.today().isoformat(), "note": note}
+    mp.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    return meta["review"]
+
+
 # ---------------------------------------------------------------- freeze / verify
 def _rel(p, root):
     return str(Path(p).relative_to(root)).replace("\\", "/")
 
 
 def freeze(reviewer, root=REAL, manifest=MANIFEST, train_dirs=None):
-    """Refuses unless QA passes, every frame is reviewed and leakage is zero. Records sha256 of every file
-    (paths relative to eval/real), reviewer and date, then makes the files read-only."""
+    """Refuses unless QA passes, every frame is reviewed, every clip has a review mode and leakage is zero.
+    Records sha256 of every file (paths relative to eval/real), reviewer, date and per-clip review mode, then
+    makes the files read-only."""
     root, manifest = Path(root), Path(manifest)
     rep = qa(root)
     if not rep["pass"]:
         raise SystemExit("refusing to freeze: QA fails (run `realset.py qa`)")
     if not rep["all_reviewed"]:
         raise SystemExit(f"refusing to freeze: {rep['frames'] - rep['reviewed']} frames not reviewed")
+    modes = {d.name: json.loads((d / "clip.json").read_text(encoding="utf-8")).get("review") for d in clips(root)}
+    unset = [k for k, v in modes.items() if not v or v.get("mode") not in REVIEW_MODES]
+    if unset:
+        raise SystemExit(f"refusing to freeze: no review mode for {unset} (run `realset.py review <clip> full|sample`)")
     lk = leakage(train_dirs, root=root)
     if not lk["pass"]:
         raise SystemExit(f"refusing to freeze: leakage ({len(lk['exact'])} exact, {len(lk['near'])} near)")
@@ -280,7 +298,7 @@ def freeze(reviewer, root=REAL, manifest=MANIFEST, train_dirs=None):
                           "source": meta["source"], "licence": meta["licence"], "split": "real"})
     real = m["splits"]["real"]
     real.update({"root": "eval/real", "files": files, "reviewer": reviewer, "review_date": dt.date.today().isoformat(),
-                 "frames": rep["frames"], "clips": len(rep["clips"]),
+                 "frames": rep["frames"], "clips": len(rep["clips"]), "review": modes,
                  "leakage": {"train_dirs": lk["train_dirs"], "train_images": lk["train_images"], "matches": 0}})
     m["frozen"] = True
     m["frozen_at"] = dt.datetime.now().isoformat(timespec="seconds")
@@ -414,6 +432,11 @@ def main():
     fz = sub.add_parser("freeze")
     fz.add_argument("--reviewer", required=True)
     sub.add_parser("verify")
+    rv = sub.add_parser("review")
+    rv.add_argument("clip")
+    rv.add_argument("mode", choices=REVIEW_MODES)
+    rv.add_argument("--reviewer", default="Keno")
+    rv.add_argument("--note")
     a = ap.parse_args()
     if a.cmd == "extract":
         out, n = extract(a.video, a.clip_id, a.source, a.licence, every_s=a.every_s, dense=a.dense, start_s=a.start_s,
@@ -433,6 +456,8 @@ def main():
         sys.exit(0 if r["pass"] else 1)
     elif a.cmd == "freeze":
         print(f"frozen {freeze(a.reviewer)} files (read-only)")
+    elif a.cmd == "review":
+        print(a.clip, set_review(a.clip, a.mode, a.reviewer, a.note))
     elif a.cmd == "verify":
         r = verify()
         print(json.dumps({k: (v if not isinstance(v, list) else len(v)) for k, v in r.items()}, indent=1))
