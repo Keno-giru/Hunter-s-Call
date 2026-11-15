@@ -97,14 +97,16 @@ def main(name):
     (clip_dir / "clip.json").write_text(json.dumps(sc, indent=1), encoding="utf-8")
     print(f"{len(keys)} calibration keys, {skipped} frames skipped, cuts at {cuts} ms")
 
-    # 3. boxes.jsonl from SoccerNet's boxes (in video pixels)
+    # 3. boxes.jsonl from SoccerNet's boxes, in the pixels of the video `track` reads (the proxy: clip width/height)
+    sx, sy = sc["clip"]["width"] / w, sc["clip"]["height"] / h
     rows = []
     for k, im in enumerate(order):
         bx = []
         for a in by_img.get(im["image_id"], []):
             b, cls = a["bbox_image"], CLS.get(a["category_id"])
             if cls:
-                bx.append({"cls": cls, "x1": b["x"], "y1": b["y"], "x2": b["x"] + b["w"], "y2": b["y"] + b["h"], "conf": 1.0})
+                bx.append({"cls": cls, "x1": round(b["x"] * sx, 2), "y1": round(b["y"] * sy, 2),
+                           "x2": round((b["x"] + b["w"]) * sx, 2), "y2": round((b["y"] + b["h"]) * sy, 2), "conf": 1.0})
         rows.append({"frame": k, "t_ms": round(k * 1000 / fps), "boxes": bx})
     (clip_dir / "boxes.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     print(f"boxes.jsonl: {sum(len(r['boxes']) for r in rows)} boxes over {len(rows)} frames")

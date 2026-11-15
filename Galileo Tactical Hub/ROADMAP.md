@@ -97,3 +97,7 @@ Dated, scoped verdicts with numbers. Newest last.
   SoccerNet's hand boxes standing in for the T2 detector and the line-fit calibration (689/750 frames,
   median 0.48 px / 2.7 cm). 22 tracked players, 5 possession spells. `eval/preview_gsr.py`. Not a test,
   and the clip is an exam clip: never used for training.
+- 2026-11-15, preview fix: boxes were written in 1920x1080 px but `track` reads the 720p proxy, so players
+  landed 177 px (median) off their feet and kit colours were sampled from the wrong crops. Scaled to the
+  proxy: alignment median 1.0 px (p90 3.1 px), team labels agree with SoccerNet's on 97.7% of matches.
+  Referees are excluded from packs by design (assign_teams), so the hub does not draw them.
