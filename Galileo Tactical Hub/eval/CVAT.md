@@ -24,6 +24,24 @@ docker exec -it cvat_server bash -ic "python3 ~/manage.py createsuperuser"
 Open http://localhost:8080 and sign in. Stop it later with `docker compose down` in the cvat folder
 (your work is kept in Docker volumes).
 
+## Quick path (does steps 2, 3 and 5 for you)
+
+```bash
+python eval/cvat.py setup
+```
+
+creates the project, the label spec, one task per clip with its frames, and imports the pre-labels. After
+reviewing (step 4):
+
+```bash
+python eval/cvat.py pull
+```
+
+downloads every task and imports it into eval/real, then prints QA. Both ask for your CVAT username and
+password in the terminal (hidden, never stored). Re-running `setup` skips what already exists.
+
+The manual steps below do the same through the CVAT web UI.
+
 ## 2. Project and labels (once)
 
 ```bash

@@ -8,3 +8,4 @@ scikit-learn>=1.3     # video: kit clustering
 # optional
 # kaggle                      # `galileo.py fetch <kaggle source>` (needs your API token)
 # ultralytics                 # `galileo.py detect` and `calibrate --model` (pulls in torch)
+# cvat-sdk==2.79.0            # `eval/cvat.py setup|pull` (exam review in a local CVAT)

@@ -1,5 +1,7 @@
 """eval/real <-> CVAT (self-hosted) for Keno's review. Format: "CVAT for images 1.1" XML.
 
+    python eval/cvat.py setup                        # project + 5 tasks + pre-labels on the local CVAT (asks your login)
+    python eval/cvat.py pull                         # reviewed annotations back into eval/real (asks your login)
     python eval/cvat.py labels                       # writes eval/cvat/labels.json: paste into CVAT's Raw label editor
     python eval/cvat.py export [CLIP ...]            # eval/cvat/<clip>/annotations.xml (+ .zip) from labels.jsonl
     python eval/cvat.py import CLIP export.zip|.xml  # corrections back into eval/real/<clip>/labels.jsonl
@@ -181,9 +183,70 @@ def import_(clip_id, path, root_dir=R.REAL):
     return {"frames": len(rows), "changed": changed, "reviewed": reviewed}
 
 
+# ---------------------------------------------------------------- server (cvat-sdk; credentials typed by Keno)
+PROJECT = "Galileo eval-real"
+
+
+def _client(host):
+    """Log in with credentials typed in this terminal (hidden). Nothing is stored or printed."""
+    import getpass
+    from cvat_sdk import make_client
+    user = input("CVAT username: ").strip()
+    pw = getpass.getpass("CVAT password (hidden): ")
+    return make_client(host, credentials=(user, pw))
+
+
+def setup(host, clip_ids=None):
+    """Project with the label spec, one task per clip (frames uploaded, sorted by name), pre-labels imported.
+    Re-running skips the project and any task that already exists."""
+    from cvat_sdk.core.proxies.tasks import ResourceType
+    export(clip_ids)
+    with _client(host) as c:
+        proj = next((p for p in c.projects.list() if p.name == PROJECT), None)
+        if proj is None:
+            proj = c.projects.create({"name": PROJECT, "labels": label_spec()})
+            print(f"project '{PROJECT}' created (id {proj.id})")
+        else:
+            print(f"project '{PROJECT}' exists (id {proj.id})")
+        have = {t.name for t in c.tasks.list() if t.project_id == proj.id}
+        for d in R.clips():
+            if clip_ids and d.name not in clip_ids:
+                continue
+            if d.name in have:
+                print(f"{d.name}: task exists, skipped")
+                continue
+            frames = sorted(str(p) for p in (d / "frames").glob("*.jpg"))
+            t = c.tasks.create_from_data({"name": d.name, "project_id": proj.id}, frames, resource_type=ResourceType.LOCAL,
+                                         data_params={"sorting_method": "lexicographical", "image_quality": 95})
+            t.import_annotations("CVAT 1.1", str(OUT / d.name / "annotations.zip"))
+            print(f"{d.name}: task {t.id}, {len(frames)} frames, pre-labels imported")
+
+
+def pull(host, clip_ids=None):
+    """Download every task as 'CVAT for images 1.1' (no images) and import it into eval/real."""
+    with _client(host) as c:
+        proj = next((p for p in c.projects.list() if p.name == PROJECT), None)
+        if proj is None:
+            raise SystemExit(f"no CVAT project '{PROJECT}' (run setup first)")
+        for t in c.tasks.list():
+            if t.project_id != proj.id or (clip_ids and t.name not in clip_ids):
+                continue
+            z = OUT / t.name / "review_export.zip"
+            z.parent.mkdir(parents=True, exist_ok=True)
+            t.export_dataset("CVAT for images 1.1", str(z), include_images=False)
+            r = import_(t.name, z)
+            print(f"{t.name}: {r['frames']} frames, {r['changed']} changed, {r['reviewed']} reviewed")
+    rep = R.qa()
+    print(f"\nall clips: reviewed {rep['reviewed']}/{rep['frames']}, label errors {rep['errors']}, QA {'PASS' if rep['pass'] else 'FAIL'}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("setup", "pull"):
+        s = sub.add_parser(name)
+        s.add_argument("clips", nargs="*")
+        s.add_argument("--host", default="http://localhost:8080")
     sub.add_parser("labels")
     e = sub.add_parser("export")
     e.add_argument("clips", nargs="*")
@@ -191,7 +254,11 @@ def main():
     i.add_argument("clip")
     i.add_argument("path")
     a = ap.parse_args()
-    if a.cmd == "labels":
+    if a.cmd == "setup":
+        setup(a.host, a.clips)
+    elif a.cmd == "pull":
+        pull(a.host, a.clips)
+    elif a.cmd == "labels":
         OUT.mkdir(parents=True, exist_ok=True)
         (OUT / "labels.json").write_text(json.dumps(label_spec(), indent=2), encoding="utf-8")
         print(f"wrote {(OUT / 'labels.json').relative_to(HUB)}: paste into Project > Labels > Raw")
