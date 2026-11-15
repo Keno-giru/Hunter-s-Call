@@ -74,6 +74,9 @@ Dated, scoped verdicts with numbers. Newest last.
   (game 8) and SNGS-196 (game 11), 30.0 s each (max gaps 5.0 s and 2.8 s). SNGS-119 dropped: its first
   10 s carry side names inconsistent with the view (2 usable frames). QA PASS before review; not frozen.
 - 2026-11-15, T1 finding for Keno: the ">= 6 landmarks" rule drops most midfield frames (only centre spot,
-  halfway top and 4 circle points exist there), biasing the exam toward box views. 83-49 frames per clip
-  skipped for this. Gate unchanged; decision needed.
+  halfway top and 4 circle points exist there), biasing the exam toward box views (17-49 frames per clip
+  skipped for this). Gate unchanged; decision needed.
 - 2026-11-15, T1: identity-clip duration = span + one sampling step (30 s clip reads 30.0 s, not 29.8 s).
+- 2026-11-15, T1 (Keno): keep ">= 6 landmarks per frame". Midfield frames enter only when 6 registry
+  points are visible (e.g. centre spot, halfway top and all 4 circle points). Known consequence: eval/real
+  leans toward box and wide views; T2/T7 results on it are read with that bias in mind.

@@ -47,7 +47,7 @@ frame (baseline median 2.05 px, p95 9.5 px, max 21.6 px). These become gates in 
 | eval/real size | >= 300 frames from >= 3 clips (different stadiums or cameras) |
 | identity clips | 2 clips of >= 30 s with full track ids |
 | manifest | every file has sha256, source, licence, split, reviewer, date |
-| label QA | box sanity passes; landmark RMS of the clicked H < 3 px on every frame |
+| label QA | box sanity passes; >= 6 landmarks per frame (kept by Keno 2026-11-15); landmark RMS of the clicked H < 3 px on every frame |
 | leakage | zero eval images in any training set (hash check) |
 | sign-off | Keno's review recorded in the manifest |
 | tooling | `tests/py/test_eval.py` all pass |
