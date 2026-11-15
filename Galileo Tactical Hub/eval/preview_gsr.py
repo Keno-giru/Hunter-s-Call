@@ -112,7 +112,7 @@ def main(name):
     # 4. track -> hub pack
     run(PY, "tools/galileo.py", "track", clip_dir, "--no-eval")
     rel = clip_dir.relative_to(HUB).as_posix()
-    print(f"\nopen: http://localhost:8000/index.html?pack=datasets/matches/video-{clip_id}/pack.ghp.json"
+    print(f"\nopen: http://localhost:8000/index.html?pack=datasets/matches/video-{clip_dir.name}/pack.ghp.json"
           f"&footage={rel}/proxy.mp4&view=video   (after `python tools/serve.py`)")
 
 
