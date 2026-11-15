@@ -9,3 +9,4 @@ docs/reference/*transcript*
 eval/real/*/frames/
 # SoccerNet-GSR-derived exam clips: rebuild with `eval/import_gsr.py fetch` + `convert` (third-party content)
 eval/real/gsr-*/
+eval/cvat/

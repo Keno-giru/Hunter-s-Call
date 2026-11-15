@@ -80,3 +80,6 @@ Dated, scoped verdicts with numbers. Newest last.
 - 2026-11-15, T1 (Keno): keep ">= 6 landmarks per frame". Midfield frames enter only when 6 registry
   points are visible (e.g. centre spot, halfway top and all 4 circle points). Known consequence: eval/real
   leans toward box and wide views; T2/T7 results on it are read with that bias in mind.
+- 2026-11-15, T1 (Keno): review in self-hosted CVAT. `eval/cvat.py` converts labels.jsonl <-> "CVAT for
+  images 1.1" (tests/py/test_cvat.py 14/14); all 5 clips round-trip with 0 changes. Guide: eval/CVAT.md.
+  eval/cvat/ exports are gitignored (SoccerNet-derived).
