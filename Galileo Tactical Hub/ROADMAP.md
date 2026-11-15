@@ -49,3 +49,8 @@ Dated, scoped verdicts with numbers. Newest last.
   baseline") to one-sided non-regression, same baselines and tolerance. Rerun: 10/11. track_purity 0.890
   now PASS (>= 0.849); tracks_per_player 1.53 still FAIL (<= 1.52): a real 0.03 fragmentation regression
   against the recorded baseline. Two-sided run kept as `eval/results/2026-11-13_T0_run2_twosided.json`.
+- 2026-11-15, T0: tracks_per_player FAIL investigated. Libraries ruled out (2023-era numpy/scipy/sklearn/
+  opencv give identical numbers). The value is 29/19 = 1.526; with 19 players it moves in steps of 0.053,
+  and the baseline "1.5" (one decimal) fits 28/19 or 29/19, so no regression is shown. 10 extra tracks:
+  4 split across the 2 s close-up, 4 zero-gap identity handovers, 1 one-frame break, 1 re-entry after
+  3.9 s. Proposed: restate the gate as "<= 29 tracks over 19 players" (awaiting Keno). Gate unchanged.

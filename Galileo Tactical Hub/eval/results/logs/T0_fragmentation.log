@@ -1,0 +1,9 @@
+frames 250 dt 0.080s  provider players 19  video tracks owning 29  ratio 1.5263
+provider 1 (home): track 5: f37-99 (62 matched) | gap 2.00s (in view 0/25 frames) | track 12: f125-188 (43 matched) | gap 0.08s (in view 1/1 frames) | track 16: f190-194 (5 matched)
+provider 17 (away): track 29: f75-165 (66 matched) | gap 0.00s (in view 0/0 frames) | track 35: f166-194 (25 matched) | gap 3.92s (in view 0/49 frames) | track 38: f244-245 (2 matched)
+provider 8 (home): track 3: f37-144 (83 matched) | gap 0.00s (in view 0/0 frames) | track 1: f145-249 (105 matched)
+provider 3 (home): track 9: f37-46 (10 matched) | gap 6.24s (in view 36/78 frames) | track 2: f125-194 (70 matched)
+provider 7 (home): track 8: f37-99 (63 matched) | gap 2.00s (in view 0/25 frames) | track 6: f125-249 (80 matched)
+provider 10 (home): track 10: f38-99 (61 matched) | gap 2.00s (in view 0/25 frames) | track 4: f125-249 (80 matched)
+provider 20 (away): track 22: f37-70 (12 matched) | gap 0.00s (in view 0/0 frames) | track 31: f71-249 (105 matched)
+provider 23 (away): track 33: f80-141 (36 matched) | gap 0.00s (in view 0/0 frames) | track 34: f142-249 (98 matched)
