@@ -5,3 +5,5 @@ __pycache__/
 .venv/
 models/*.pt
 docs/reference/*transcript*
+# third-party exam frames never go to the public repo; their sha256 is in eval/MANIFEST.json
+eval/real/*/frames/

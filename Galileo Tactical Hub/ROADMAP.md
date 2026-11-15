@@ -62,3 +62,8 @@ Dated, scoped verdicts with numbers. Newest last.
   landmarks clicked along one image line fit a degenerate H with RMS 0 px; QA now requires image spread
   >= 5 px and a non-singular H. Leakage uses sha256 plus dHash (re-encoded copies). Data not started:
   needs Keno's choice of footage and review tool.
+- 2026-11-15, T1: footage sources researched (`eval/SOURCES.md`). Best fit: SoccerNet-GSR (broadcast
+  1080p, 30 s clips with boxes in Galileo's 4 classes, track ids, teams, pitch metres and per-frame pitch
+  lines; HF repo GPL-3.0, not gated; single clips fetchable by HTTP range, ~180 MB). Kaggle SoccerTrack/
+  TeamTrack are drone/fisheye only. Commons has CC BY 3.0 4K Eredivisie fan-camera matches (end view).
+  Third-party frames are gitignored in eval/real.
