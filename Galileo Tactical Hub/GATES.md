@@ -50,6 +50,13 @@ frame (baseline median 2.05 px, p95 9.5 px, max 21.6 px). These become gates in 
 | label QA | box sanity passes; landmark RMS of the clicked H < 3 px on every frame |
 | leakage | zero eval images in any training set (hash check) |
 | sign-off | Keno's review recorded in the manifest |
+| tooling | `tests/py/test_eval.py` all pass |
+| frozen and unchanged | `realset.py verify`: 0 changed, 0 unrecorded files |
+
+How the T1 gates are measured (`eval/realset.py`, stricter than the brief, never looser):
+label QA also rejects landmarks clicked outside the image and degenerate fits (pitch spread < 2 m or
+image spread < 5 px: collinear clicks otherwise fit with RMS 0); leakage checks sha256 **and** a 64-bit
+dHash (<= 4 bits apart), so re-encoded or resized copies of an eval frame in a training set are caught.
 
 ## T2. Detector bake-off (proposed)
 

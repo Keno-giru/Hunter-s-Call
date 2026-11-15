@@ -130,7 +130,45 @@ def t0(args):
     return board, measured
 
 
-TRACKS = {"T0": t0}
+def t1(args):
+    """T1 exam gates (GATES.md). eval/real must be built, reviewed by Keno and frozen with `eval/realset.py`."""
+    sys.path.insert(0, str(HUB / "eval"))
+    import realset as R
+    board = []
+    rc, out, log = run("test_eval", [PY, "tests/py/test_eval.py"], "T1")
+    c = count(out, r"(\d+) passed, (\d+) failed")
+    p, f = c[-1] if c else (0, 1)
+    gate(board, "test_eval (exam tooling)", "all pass", f"{p}/{p + f}", rc == 0 and f == 0 and p > 0, log)
+    rep = R.qa()
+    (LOGS / "T1_qa.json").write_text(json.dumps(rep, indent=2, default=str), encoding="utf-8")
+    ev = "eval/results/logs/T1_qa.json"
+    gate(board, "eval/real size", f">= {R.MIN_FRAMES} frames, >= {R.MIN_CLIPS} clips",
+         f"{rep['frames']} frames, {len(rep['clips'])} clips", rep["size_ok"], ev)
+    gate(board, "identity clips", f">= {R.MIN_IDENTITY_CLIPS} clips of >= {R.MIN_IDENTITY_S:.0f} s",
+         rep["identity_clips_ok"], rep["identity_ok"], ev)
+    rms = [c["rms_px"]["max"] for c in rep["clips"] if c["rms_px"]]
+    gate(board, "label QA", f"0 errors; clicked-H RMS < {R.MAX_LANDMARK_RMS_PX} px",
+         f"{rep['errors']} errors, max RMS {max(rms) if rms else None}", rep["labels_ok"], ev)
+    lk = R.leakage()
+    (LOGS / "T1_leakage.json").write_text(json.dumps(lk, indent=2), encoding="utf-8")
+    gate(board, "leakage (sha256 + dHash)", "0 matches", f"{len(lk['exact'])} exact, {len(lk['near'])} near "
+         f"vs {lk['train_images']} training images", lk["pass"] and lk["eval_images"] > 0, "eval/results/logs/T1_leakage.json")
+    m = json.loads((HUB / "eval/MANIFEST.json").read_text(encoding="utf-8"))
+    real = m["splits"]["real"]
+    complete = bool(real.get("files")) and all(all(f.get(k) for k in ("file", "sha256", "source", "licence", "split"))
+                                               for f in real["files"])
+    gate(board, "manifest complete", "every file: sha256, source, licence, split", f"{len(real.get('files', []))} files",
+         complete, "eval/MANIFEST.json")
+    gate(board, "Keno sign-off", "reviewer + date in manifest, every frame reviewed",
+         f"{real.get('reviewer')} {real.get('review_date')}, reviewed {rep['reviewed']}/{rep['frames']}",
+         bool(real.get("reviewer")) and bool(real.get("review_date")) and rep["all_reviewed"], "eval/MANIFEST.json")
+    v = R.verify()
+    gate(board, "frozen and unchanged", "frozen; 0 changed, 0 unrecorded files",
+         f"frozen={v['frozen']}, {len(v['changed'])} changed, {len(v['unrecorded'])} unrecorded", v["pass"], "eval/MANIFEST.json")
+    return board, {"qa": {k: rep[k] for k in ("frames", "reviewed", "errors", "classes", "teams")}}
+
+
+TRACKS = {"T0": t0, "T1": t1}
 
 
 def main():

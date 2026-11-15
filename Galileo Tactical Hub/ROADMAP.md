@@ -57,3 +57,8 @@ Dated, scoped verdicts with numbers. Newest last.
 - 2026-11-15, T0 (Keno approved): fragmentation gate restated as "<= 29 video tracks over exactly 19
   provider players", re-recorded at full precision on Keno's PC. **T0 PASS 11/11**
   (`eval/results/2026-11-15_T0.json`). Next: T1 (exam), which needs footage or dataset choices from Keno.
+- 2026-11-15, T1: exam tooling built: `eval/realset.py` (extract with box and landmark pre-labels, QA,
+  leakage, freeze, verify) and `tests/py/test_eval.py` (34/34). Its tests caught a QA hole: six
+  landmarks clicked along one image line fit a degenerate H with RMS 0 px; QA now requires image spread
+  >= 5 px and a non-singular H. Leakage uses sha256 plus dHash (re-encoded copies). Data not started:
+  needs Keno's choice of footage and review tool.
