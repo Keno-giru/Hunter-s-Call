@@ -74,9 +74,12 @@ Open the job (annotation mode, not track mode). For each frame:
   missing players or ball added, spectators or coaches removed
 - identity clips (`gsr-SNGS-137`, `gsr-SNGS-196`): the same person keeps the same `id` throughout
 - landmarks: each point on its pitch marking; delete one you cannot see; keep at least 6 per frame
-- then add the tag **reviewed** to the frame (Tag annotation on the left toolbar), and Save (Ctrl+S)
+- Save often (Ctrl+S)
 
-A frame without the `reviewed` tag counts as not reviewed, and the exam cannot be frozen until all 461 are.
+When you have checked **every** frame of a job: Menu (top left) > **Finish the job** (state "completed").
+`pull` then counts all frames of that job as reviewed. Halfway through a job, you can instead mark single
+frames: left toolbar > tag icon (Setup tag) > label `reviewed` > Tag. The exam cannot be frozen until all
+461 frames are reviewed.
 
 ## 5. Back into Galileo
 

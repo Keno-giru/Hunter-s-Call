@@ -83,3 +83,6 @@ Dated, scoped verdicts with numbers. Newest last.
 - 2026-11-15, T1 (Keno): review in self-hosted CVAT. `eval/cvat.py` converts labels.jsonl <-> "CVAT for
   images 1.1" (tests/py/test_cvat.py 14/14); all 5 clips round-trip with 0 changes. Guide: eval/CVAT.md.
   eval/cvat/ exports are gitignored (SoccerNet-derived).
+- 2026-11-15, T1 (Keno): a CVAT job marked "completed" means every frame in it was checked; `cvat.py pull`
+  marks all its frames reviewed (provenance "CVAT job completed"). The per-frame `reviewed` tag remains for
+  partly reviewed jobs.

@@ -12,6 +12,7 @@ Mapping (one CVAT task per clip, images = eval/real/<clip>/frames/*.jpg, matched
     box  ball
     points landmark            attribute kp = pitch registry id (one point per landmark)
     tag  reviewed              image-level: Keno checked and corrected this frame
+    job state "completed"     every frame of that job counts as reviewed (pull reads it from the server)
 
 Import replaces boxes and landmarks of every frame present in the CVAT export, sets reviewed from the tag,
 and keeps image, sha256, frame, t_ms and size. Frames missing from the export are an error (nothing is
@@ -156,7 +157,9 @@ def from_xml(root):
     return out
 
 
-def import_(clip_id, path, root_dir=R.REAL):
+def import_(clip_id, path, root_dir=R.REAL, job_completed=False):
+    """job_completed=True: the CVAT job was marked completed, i.e. Keno checked every frame of it, so every
+    frame counts as reviewed (the per-frame `reviewed` tag is for partly reviewed jobs)."""
     d = Path(root_dir) / clip_id
     rows = R.read_labels(d)
     if not rows:
@@ -174,11 +177,12 @@ def import_(clip_id, path, root_dir=R.REAL):
     for r in rows:
         g = got[Path(r["image"]).name]
         before = norm(r.get("boxes", []), r.get("landmarks", []))
-        r["boxes"], r["landmarks"], r["reviewed"] = g["boxes"], g["landmarks"], g["reviewed"]
+        r["boxes"], r["landmarks"] = g["boxes"], g["landmarks"]
+        r["reviewed"] = bool(g["reviewed"] or job_completed)
         changed += before != norm(r["boxes"], r["landmarks"])
         reviewed += r["reviewed"]
-        if g["reviewed"]:
-            r.setdefault("prelabel", {})["reviewed_in"] = "CVAT"
+        if r["reviewed"]:
+            r.setdefault("prelabel", {})["reviewed_in"] = "CVAT job completed" if job_completed and not g["reviewed"] else "CVAT tag"
     R.write_labels(d, rows)
     return {"frames": len(rows), "changed": changed, "reviewed": reviewed}
 
@@ -234,8 +238,11 @@ def pull(host, clip_ids=None):
             z = OUT / t.name / "review_export.zip"
             z.parent.mkdir(parents=True, exist_ok=True)
             t.export_dataset("CVAT for images 1.1", str(z), include_images=False)
-            r = import_(t.name, z)
-            print(f"{t.name}: {r['frames']} frames, {r['changed']} changed, {r['reviewed']} reviewed")
+            jobs = t.get_jobs()
+            done = bool(jobs) and all(j.state == "completed" for j in jobs)
+            r = import_(t.name, z, job_completed=done)
+            print(f"{t.name}: {r['frames']} frames, {r['changed']} changed, {r['reviewed']} reviewed"
+                  + (" (job completed)" if done else ""))
     rep = R.qa()
     print(f"\nall clips: reviewed {rep['reviewed']}/{rep['frames']}, label errors {rep['errors']}, QA {'PASS' if rep['pass'] else 'FAIL'}")
 

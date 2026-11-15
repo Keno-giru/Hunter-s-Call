@@ -71,7 +71,7 @@ try:
     ok("import: team corrected", new[0]["boxes"][0]["team"] == "away")
     ok("import: landmark moved", new[0]["landmarks"][0] == {"id": "ctr", "u": 970.0, "v": 545.0})
     ok("import: sha256, frame, t_ms kept", new[0]["sha256"] == "a" * 64 and new[0]["frame"] == 6 and new[0]["t_ms"] == 200)
-    ok("import: reviewed set", new[0]["reviewed"] and new[0]["prelabel"]["reviewed_in"] == "CVAT")
+    ok("import: reviewed set", new[0]["reviewed"] and new[0]["prelabel"]["reviewed_in"] == "CVAT tag")
 
     # a partial export must not write anything
     e2 = ET.fromstring(xml)
@@ -92,6 +92,15 @@ try:
         ok("import: track export refused", False)
     except SystemExit as ex:
         ok("import: track export refused", "tracks" in str(ex))
+    # a completed job marks every frame reviewed, tags or not
+    plain = tmp / "plain.xml"
+    plain.write_text(C.to_xml([{**x, "reviewed": False} for x in rows]))
+    r = C.import_("c1", plain, root_dir=root, job_completed=True)
+    new = R.read_labels(d)
+    ok("import: completed job -> all frames reviewed", r["reviewed"] == 2 and all(x["reviewed"] for x in new)
+       and new[0]["prelabel"]["reviewed_in"] == "CVAT job completed", json.dumps(r))
+    r = C.import_("c1", plain, root_dir=root)
+    ok("import: open job without tags -> nothing reviewed", r["reviewed"] == 0, json.dumps(r))
     spec = C.label_spec()
     ok("labels: 6 labels, 37 landmark ids", len(spec) == 6 and len(spec[4]["attributes"][0]["values"]) == 37)
 finally:
