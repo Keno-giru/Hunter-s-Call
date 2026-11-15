@@ -65,15 +65,34 @@ dHash (<= 4 bits apart), so re-encoded or resized copies of an eval frame in a t
 An identity clip's duration is the first-to-last frame span plus one sampling step (a full 30 s clip of
 750 frames at 25 fps covers 30.0 s; the bare span would read 29.8-29.96 s). Threshold unchanged (2026-11-15).
 
-## T2. Detector bake-off (proposed)
+## T2. Detector bake-off (thresholds from the brief; awaiting Keno's OK to freeze)
 
-| Gate (on eval/real) | Threshold |
+| Gate (on the frozen eval/real, 461 frames) | Threshold |
 |---|---|
+| exam unchanged | `realset.py verify` passes |
+| leakage | 0 eval frames (sha256 or dHash) in the training set |
 | player mAP50 | >= 0.90 |
 | ball recall (IoU 0.3, conf 0.1) | >= 0.55 and >= 2x COCO YOLOv8x baseline |
-| referee precision | >= 0.85 |
-| spectators off the pitch | <= 0.2 false players per frame |
+| referee precision (conf 0.25) | >= 0.85 |
+| spectators off the pitch (conf 0.25) | <= 0.2 false players per frame |
 | inference speed | >= 15 fps at 1280 px on the RTX 3060 |
+
+How they are measured (`eval/run.py --track T2`):
+- mAP50 per class with the standard 101-point interpolated AP at IoU 0.5 over all conf; player = class `player`
+  (keepers are scored as their own class and reported, not gated).
+- ball recall: share of labelled balls matched by a predicted ball with IoU >= 0.3 and conf >= 0.1.
+- referee precision: predicted referees at conf >= 0.25 that match a labelled referee (IoU >= 0.5).
+- spectators: predicted player/goalkeeper boxes at conf >= 0.25 whose foot point (box bottom-middle) maps
+  through the frame's true H to more than 2 m outside the 105 x 68 pitch; counted per frame, averaged.
+- speed: frames per second at imgsz 1280, batch 1, FP16, on 200 exam frames after 20 warm-up frames,
+  model time only (no disk reads).
+- COCO baseline: YOLOv8x pretrained on COCO, `person` -> player, `sports ball` -> ball, no fine-tuning.
+
+Training data (proposed): SoccerNet-GSR train split (games 4, 6, 9) for training and valid split (games
+2, 3, 5) for model selection; the exam is games 7, 8, 11 and is never used. Every 10th frame (75 per clip),
+fetched as single files by HTTP range (~2 GB). Same four classes as Galileo, keepers labelled, so no
+goalkeeper conflict. The Kaggle players-detection set (no goalkeeper class, behind-goal view) is left out
+of the first runs. Budget: <= 4 runs, <= 3 GPU-hours each.
 
 ## T3. detect for real (proposed)
 
