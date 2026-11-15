@@ -1,0 +1,18 @@
+SNGS-196.mp4: 1920x1080 25.0 fps 30.0 s (h264)
+proxy -> proxy.mp4 (720p H.264, 1 s keyframes) ...
+detecting camera cuts ...
+  0 cuts
+clip: C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\footage\gsr-sngs-196
+open: http://localhost:8000/index.html?footage=datasets/footage/gsr-sngs-196/proxy.mp4
+tracking ...
+  250/750
+  500/750
+  750/750
+375 frames, 22 tracked players (22 with stats), 5 possession spells -> C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\matches\video-gsr-sngs-196
+open: http://localhost:8000/index.html?pack=datasets/matches/video-gsr-sngs-196/pack.ghp.json&footage=datasets/footage/gsr-sngs-196/proxy.mp4
++ C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\.venv\Scripts\python.exe tools/galileo.py ingest C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\sources\soccernet-gsr\preview\SNGS-196.mp4 --clip-id gsr-SNGS-196 --i-have-rights --licence SoccerNet-GSR (Hugging Face SoccerNet/SN-GSR-2025, tagged GPL-3.0); broadcast footage rights remain with the leagues/broadcasters; private research use, no redistribution --source SoccerNet-GSR test/SNGS-196, game 11 --reset --notes hub preview with SoccerNet's own boxes and line calibration; exam clip, never train on it
+689 calibration keys, 61 frames skipped, cuts at [] ms
+boxes.jsonl: 11401 boxes over 750 frames
++ C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\.venv\Scripts\python.exe tools/galileo.py track C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\footage\gsr-sngs-196 --no-eval
+
+open: http://localhost:8000/index.html?pack=datasets/matches/video-gsr-SNGS-196/pack.ghp.json&footage=datasets/footage/gsr-sngs-196/proxy.mp4&view=video   (after `python tools/serve.py`)

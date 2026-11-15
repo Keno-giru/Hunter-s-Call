@@ -93,3 +93,7 @@ Dated, scoped verdicts with numbers. Newest last.
 - 2026-11-15, T1: exam frozen (471 files, 461 frames). Keno's CVAT review moved landmarks in 30 frames,
   changed no boxes. **T1 PASS 8/8** (`eval/results/2026-11-15_T1.json`). Leakage was checked against an
   empty training set; it must be re-run in T2. Next: T2 detector bake-off.
+- 2026-11-15, preview: SNGS-196 opened in the hub through the normal ingest + track pipeline, with
+  SoccerNet's hand boxes standing in for the T2 detector and the line-fit calibration (689/750 frames,
+  median 0.48 px / 2.7 cm). 22 tracked players, 5 possession spells. `eval/preview_gsr.py`. Not a test,
+  and the clip is an exam clip: never used for training.
