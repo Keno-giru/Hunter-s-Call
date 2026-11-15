@@ -226,6 +226,12 @@ def setup(host, clip_ids=None):
             print(f"{d.name}: task {t.id}, {len(frames)} frames, pre-labels imported")
 
 
+def job_is_completed(state):
+    """cvat-sdk returns the job state as an OperationStatus model whose .value is the text ("completed");
+    the model itself does not compare equal to the string."""
+    return str(getattr(state, "value", state)) == "completed"
+
+
 def pull(host, clip_ids=None):
     """Download every task as 'CVAT for images 1.1' (no images) and import it into eval/real."""
     with _client(host) as c:
@@ -239,7 +245,7 @@ def pull(host, clip_ids=None):
             z.parent.mkdir(parents=True, exist_ok=True)
             t.export_dataset("CVAT for images 1.1", str(z), include_images=False)
             jobs = t.get_jobs()
-            done = bool(jobs) and all(j.state == "completed" for j in jobs)
+            done = bool(jobs) and all(job_is_completed(j.state) for j in jobs)
             r = import_(t.name, z, job_completed=done)
             print(f"{t.name}: {r['frames']} frames, {r['changed']} changed, {r['reviewed']} reviewed"
                   + (" (job completed)" if done else ""))
@@ -260,6 +266,7 @@ def main():
     i = sub.add_parser("import")
     i.add_argument("clip")
     i.add_argument("path")
+    i.add_argument("--job-completed", action="store_true", help="the CVAT job was finished: every frame counts as reviewed")
     a = ap.parse_args()
     if a.cmd == "setup":
         setup(a.host, a.clips)
@@ -273,7 +280,7 @@ def main():
         for name, n in export(a.clips):
             print(f"{name}: {n} frames -> eval/cvat/{name}/annotations.zip")
     else:
-        r = import_(a.clip, a.path)
+        r = import_(a.clip, a.path, job_completed=a.job_completed)
         print(f"{a.clip}: {r['frames']} frames, {r['changed']} changed, {r['reviewed']} reviewed")
         rep = R.qa(only=a.clip)
         print("QA for this clip:", "PASS" if rep["labels_ok"] else f"{rep['errors']} errors (run realset.py qa --clip {a.clip})")

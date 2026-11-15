@@ -101,6 +101,9 @@ try:
        and new[0]["prelabel"]["reviewed_in"] == "CVAT job completed", json.dumps(r))
     r = C.import_("c1", plain, root_dir=root)
     ok("import: open job without tags -> nothing reviewed", r["reviewed"] == 0, json.dumps(r))
+    from cvat_sdk.api_client import models
+    ok("job state: SDK OperationStatus('completed') counts as completed", C.job_is_completed(models.OperationStatus("completed"))
+       and C.job_is_completed("completed") and not C.job_is_completed(models.OperationStatus("in progress")))
     spec = C.label_spec()
     ok("labels: 6 labels, 37 landmark ids", len(spec) == 6 and len(spec[4]["attributes"][0]["values"]) == 37)
 finally:

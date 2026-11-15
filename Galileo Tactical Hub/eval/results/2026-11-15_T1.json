@@ -1,0 +1,80 @@
+{
+  "track": "T1",
+  "date": "2026-11-15T21:09:39",
+  "pass": true,
+  "gates": [
+    {
+      "gate": "test_eval (exam tooling)",
+      "threshold": "all pass",
+      "result": "36/36",
+      "status": "PASS",
+      "evidence": "eval/results/logs/T1_test_eval.log"
+    },
+    {
+      "gate": "eval/real size",
+      "threshold": ">= 300 frames, >= 3 clips",
+      "result": "461 frames, 5 clips",
+      "status": "PASS",
+      "evidence": "eval/results/logs/T1_qa.json"
+    },
+    {
+      "gate": "identity clips",
+      "threshold": ">= 2 clips of >= 30 s",
+      "result": 2,
+      "status": "PASS",
+      "evidence": "eval/results/logs/T1_qa.json"
+    },
+    {
+      "gate": "label QA",
+      "threshold": "0 errors; clicked-H RMS < 3.0 px",
+      "result": "0 errors, max RMS 0.045",
+      "status": "PASS",
+      "evidence": "eval/results/logs/T1_qa.json"
+    },
+    {
+      "gate": "leakage (sha256 + dHash)",
+      "threshold": "0 matches",
+      "result": "0 exact, 0 near vs 0 training images",
+      "status": "PASS",
+      "evidence": "eval/results/logs/T1_leakage.json"
+    },
+    {
+      "gate": "manifest complete",
+      "threshold": "every file: sha256, source, licence, split",
+      "result": "471 files",
+      "status": "PASS",
+      "evidence": "eval/MANIFEST.json"
+    },
+    {
+      "gate": "Keno sign-off",
+      "threshold": "reviewer + date; every frame accepted; review mode per clip (full | sample)",
+      "result": "Keno 2026-11-15, reviewed 461/461; SNGS-129 full, SNGS-137 sample, SNGS-143 sample, SNGS-190 sample, SNGS-196 full",
+      "status": "PASS",
+      "evidence": "eval/MANIFEST.json"
+    },
+    {
+      "gate": "frozen and unchanged",
+      "threshold": "frozen; 0 changed, 0 unrecorded files",
+      "result": "frozen=True, 0 changed, 0 unrecorded",
+      "status": "PASS",
+      "evidence": "eval/MANIFEST.json"
+    }
+  ],
+  "measured": {
+    "qa": {
+      "frames": 461,
+      "reviewed": 461,
+      "errors": 0,
+      "classes": {
+        "player": 4761,
+        "goalkeeper": 360,
+        "referee": 482,
+        "ball": 413
+      },
+      "teams": {
+        "away": 2333,
+        "home": 2788
+      }
+    }
+  }
+}

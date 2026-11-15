@@ -8,7 +8,7 @@ after the previous one is reported.
 | Phase | Tracks | Goal | Status |
 |---|---|---|---|
 | 0. Baseline | T0 | gates, roadmap, exam skeleton; every existing test and the synthetic pipeline re-measured | done 2026-11-15 (PASS 11/11) |
-| 1. Exam | T1 | eval/real: >= 300 hand-checked frames from >= 3 clips, frozen; Keno signs off | next |
+| 1. Exam | T1 | eval/real: >= 300 hand-checked frames from >= 3 clips, frozen; Keno signs off | done 2026-11-15 (PASS 8/8) |
 | 2. Detection | T2, T3 | a trained football detector chosen by bake-off; `detect` running end to end on Keno's PC | |
 | 3. Tracking | T4, T5, T6 | tracker bake-off; teams, keepers, referees; ball, possession, team ball control | |
 | 4. Geometry and physics | T7, T8 | camera drift control; speed and distance validated | |
@@ -90,3 +90,6 @@ Dated, scoped verdicts with numbers. Newest last.
   audit: SNGS-137, SNGS-143, SNGS-190 (frames found accurate; sample size not recorded). The "every frame"
   rule is relaxed for human-annotated sources; mode recorded per clip (`realset.py review`) and in the
   manifest at freeze. Note: the sample-audited clips carry SoccerNet's labels with lighter verification.
+- 2026-11-15, T1: exam frozen (471 files, 461 frames). Keno's CVAT review moved landmarks in 30 frames,
+  changed no boxes. **T1 PASS 8/8** (`eval/results/2026-11-15_T1.json`). Leakage was checked against an
+  empty training set; it must be re-run in T2. Next: T2 detector bake-off.
