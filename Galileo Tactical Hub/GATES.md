@@ -22,7 +22,7 @@ Runner: `python eval/run.py --track Tn` prints every gate and writes `eval/resul
 | synthetic tracking: precision | >= 0.914 (baseline 0.934 - 0.02) |
 | synthetic tracking: team_accuracy | >= 0.978 (baseline 0.998 - 0.02) |
 | synthetic tracking: track_purity | >= 0.849 (baseline 0.869 - 0.02) |
-| synthetic tracking: tracks_per_player | <= 1.52 (baseline 1.5 + 0.02) |
+| synthetic tracking: video tracks | <= 29 over exactly 19 provider players seen |
 
 (Names are the keys of `datasets/matches/video-synth-broadcast/eval.json`.)
 
@@ -30,6 +30,12 @@ Amended 2026-11-13, approved by Keno: the tracking gates were two-sided ("within
 which failed track_purity 0.890 for being better than baseline. They are now one-sided
 non-regression gates (fail only when worse than baseline by more than 0.02), as T4 already is.
 Baselines and the 0.02 tolerance are unchanged. The original two-sided run stays on record.
+
+Amended 2026-11-15, approved by Keno: tracks_per_player ("<= 1.52") restated as a count. The ratio moves in
+steps of 1/19 = 0.053 on this clip and the baseline "1.5" was recorded at one decimal (fits 28 or 29
+tracks), so the old limit silently meant "<= 28". Re-recorded on Keno's PC at full precision: 29 video
+tracks over 19 provider players. Gate: <= 29 tracks, and the provider count must stay 19 (otherwise the
+clip or matching changed and the gate FAILs). Count = round(tracks_per_player x provider_players_seen).
 
 Reported, no gate in T0: auto keys vs truth (baseline 26 keys, median 1.7 px, max 3.4 px), overlay every
 frame (baseline median 2.05 px, p95 9.5 px, max 21.6 px). These become gates in T7.

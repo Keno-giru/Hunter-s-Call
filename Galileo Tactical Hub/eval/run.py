@@ -28,8 +28,10 @@ TRACK_EVAL = HUB / "datasets/matches/video-synth-broadcast/eval.json"
 # T0 baseline (AGENT_PROMPT.md section 2.3); tolerance 0.02 per GATES.md
 # one-sided non-regression (GATES.md, amended 2026-11-13): +1 = higher is better, -1 = lower is better
 T0_TRACKING = {"position_median_m": (0.16, -1), "recall_on_screen": (0.993, 1), "precision": (0.934, 1),
-               "team_accuracy": (0.998, 1), "track_purity": (0.869, 1), "tracks_per_player": (1.5, -1)}
+               "team_accuracy": (0.998, 1), "track_purity": (0.869, 1)}
 T0_TOL = 0.02
+# fragmentation as a count (GATES.md, amended 2026-11-15): <= 29 video tracks over exactly 19 provider players
+T0_MAX_TRACKS, T0_PROVIDERS = 29, 19
 
 
 def node_env():
@@ -118,6 +120,11 @@ def t0(args):
             ok = v is not None and sign * (float(v) - limit) >= -1e-9
             gate(board, f"synthetic tracking: {k}", f"{'>=' if sign > 0 else '<='} {limit}", v, ok,
                  str(TRACK_EVAL.relative_to(HUB)).replace("\\", "/"))
+        tpp, seen = ev.get("tracks_per_player"), ev.get("provider_players_seen")
+        n = round(float(tpp) * seen) if tpp is not None and seen else None
+        gate(board, "synthetic tracking: video tracks", f"<= {T0_MAX_TRACKS} over {T0_PROVIDERS} players",
+             f"{n} over {seen}", n is not None and seen == T0_PROVIDERS and n <= T0_MAX_TRACKS,
+             str(TRACK_EVAL.relative_to(HUB)).replace("\\", "/") + ", logs/T0_fragmentation.log")
     else:
         gate(board, "synthetic tracking", "eval.json present", "missing", False, "")
     return board, measured
