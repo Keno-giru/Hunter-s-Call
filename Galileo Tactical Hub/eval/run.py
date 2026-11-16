@@ -45,10 +45,18 @@ def node_env():
     return env
 
 
+def scrub(text):
+    """Logs are committed to a public repo: the hub folder becomes <hub>, the user's home folder ~."""
+    for p, tag in ((HUB, "<hub>"), (Path.home(), "~")):
+        for form in {str(p), str(p).replace("\\", "/"), str(p).replace("\\", "\\\\")}:
+            text = text.replace(form, tag)
+    return text
+
+
 def run(name, cmd, track):
     log = LOGS / f"{track}_{name}.log"
     r = subprocess.run(cmd, cwd=HUB, capture_output=True, text=True, env=node_env())
-    log.write_text(r.stdout + r.stderr, encoding="utf-8")
+    log.write_text(scrub(r.stdout + r.stderr), encoding="utf-8")
     return r.returncode, r.stdout + r.stderr, str(log.relative_to(HUB)).replace("\\", "/")
 
 
@@ -140,7 +148,7 @@ def t1(args):
     p, f = c[-1] if c else (0, 1)
     gate(board, "test_eval (exam tooling)", "all pass", f"{p}/{p + f}", rc == 0 and f == 0 and p > 0, log)
     rep = R.qa()
-    (LOGS / "T1_qa.json").write_text(json.dumps(rep, indent=2, default=str), encoding="utf-8")
+    (LOGS / "T1_qa.json").write_text(scrub(json.dumps(rep, indent=2, default=str)), encoding="utf-8")
     ev = "eval/results/logs/T1_qa.json"
     gate(board, "eval/real size", f">= {R.MIN_FRAMES} frames, >= {R.MIN_CLIPS} clips",
          f"{rep['frames']} frames, {len(rep['clips'])} clips", rep["size_ok"], ev)
@@ -150,7 +158,7 @@ def t1(args):
     gate(board, "label QA", f"0 errors; clicked-H RMS < {R.MAX_LANDMARK_RMS_PX} px",
          f"{rep['errors']} errors, max RMS {max(rms) if rms else None}", rep["labels_ok"], ev)
     lk = R.leakage()
-    (LOGS / "T1_leakage.json").write_text(json.dumps(lk, indent=2), encoding="utf-8")
+    (LOGS / "T1_leakage.json").write_text(scrub(json.dumps(lk, indent=2)), encoding="utf-8")
     gate(board, "leakage (sha256 + dHash)", "0 matches", f"{len(lk['exact'])} exact, {len(lk['near'])} near "
          f"vs {lk['train_images']} training images", lk["pass"] and lk["eval_images"] > 0, "eval/results/logs/T1_leakage.json")
     m = json.loads((HUB / "eval/MANIFEST.json").read_text(encoding="utf-8"))

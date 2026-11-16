@@ -81,6 +81,20 @@ def write_match(root, match_id, pack, *, source, licence, attribution=None, note
     return d
 
 
+def _thumb(clip_dir, file, at_s=2.0, width=480):
+    """thumb.jpg next to a clip (one frame, made once with ffmpeg) -> its file name, or None."""
+    out = Path(clip_dir) / "thumb.jpg"
+    if not out.exists():
+        import shutil
+        import subprocess
+        src = Path(clip_dir) / file
+        if not src.exists() or not shutil.which("ffmpeg"):
+            return None
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-ss", str(at_s), "-i", str(src), "-frames:v", "1",
+                        "-vf", f"scale={width}:-2", "-q:v", "4", str(out)], check=False)
+    return out.name if out.exists() else None
+
+
 def build_catalog(root, hub_rel="../index.html"):
     """Scan the root, write catalog.json and the library index.html."""
     root = Path(root)
@@ -104,7 +118,17 @@ def build_catalog(root, hub_rel="../index.html"):
                               "labels": len(sc.get("labels") or []), "synced": True, "licence": sc["provenance"].get("licence"),
                               "linked": True})
         man["dir"] = md.parent.relative_to(root).as_posix()
+        for c in clips:                                       # a frame for the hub's match picker cards
+            th = _thumb(root / c["dir"], c["file"])
+            if th:
+                c["thumb"] = th
         man["clips"] = clips
+        mi = md.parent / "match_info.json"
+        if mi.exists():
+            try:
+                man["info"] = json.loads(mi.read_text(encoding="utf-8"))
+            except ValueError:
+                pass
         matches.append(man)
     loose = []
     for cj in sorted((root / "footage").glob("*/clip.json")) if (root / "footage").is_dir() else []:

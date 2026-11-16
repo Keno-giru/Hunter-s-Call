@@ -272,6 +272,14 @@ def _rel(p, root):
     return str(Path(p).relative_to(root)).replace("\\", "/")
 
 
+def _hub_rel(d):
+    """A path as the manifest stores it: relative to the hub when inside it (the repo is public), else as given."""
+    try:
+        return Path(d).resolve().relative_to(HUB.resolve()).as_posix()
+    except ValueError:
+        return str(d)
+
+
 def freeze(reviewer, root=REAL, manifest=MANIFEST, train_dirs=None):
     """Refuses unless QA passes, every frame is reviewed, every clip has a review mode and leakage is zero.
     Records sha256 of every file (paths relative to eval/real), reviewer, date and per-clip review mode, then
@@ -299,7 +307,7 @@ def freeze(reviewer, root=REAL, manifest=MANIFEST, train_dirs=None):
     real = m["splits"]["real"]
     real.update({"root": "eval/real", "files": files, "reviewer": reviewer, "review_date": dt.date.today().isoformat(),
                  "frames": rep["frames"], "clips": len(rep["clips"]), "review": modes,
-                 "leakage": {"train_dirs": lk["train_dirs"], "train_images": lk["train_images"], "matches": 0}})
+                 "leakage": {"train_dirs": [_hub_rel(d) for d in lk["train_dirs"]], "train_images": lk["train_images"], "matches": 0}})
     m["frozen"] = True
     m["frozen_at"] = dt.datetime.now().isoformat(timespec="seconds")
     manifest.write_text(json.dumps(m, indent=2), encoding="utf-8")

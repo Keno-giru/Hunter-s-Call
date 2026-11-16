@@ -1,4 +1,8 @@
-# Stats capture and data storage (proposal, 2026-11-15: awaiting Keno's OK)
+# Stats capture and data storage (2026-11-15: first set built: physical, presence, possession)
+
+Built: `galileo.py capture <match>` (tools/galileo_data/capture.py, tests/py/test_capture.py). Output goes to
+`datasets/capture/` (one Parquet file per table and run); the location becomes configurable (data root setting).
+Still open: data root setting, team shape, passes/shots (T6), Hunter's Call signals.
 
 Goal: every match Galileo watches leaves behind a counted, queryable record (who was where, who did what,
 how sure we are) that grows into a training and analysis base. Each run makes the next model better, and the
@@ -37,7 +41,7 @@ trends and "what changed after minute 60" all come from one table.
 
 ## 3. Storage layout
 
-One root for all Galileo data, ideally on the new data drive (e.g. `D:\galileo-data\`), with the repo
+One root for all Galileo data (configurable, e.g. `<data root>/galileo-data/`), with the repo
 keeping only code and the frozen exam manifest:
 
 ```
@@ -69,7 +73,7 @@ galileo-data/
 
 1. Schema + `galileo.py capture <match>`: writes frames / events / stats Parquet from an existing pack, with
    provenance and run_id. Test on SNGS-196 and the synthetic clip.
-2. Data root setting (`GALILEO_DATA`), so datasets can move to the new drive without code changes.
+2. Data root setting (`GALILEO_DATA`), so datasets can live anywhere without code changes.
 3. Speed bands, accelerations, heatmaps, per-segment stats; a hub panel that reads them.
 4. Team-shape metrics moved from the hub into the pipeline.
 5. Passes, shots, carries once the ball and event detection lands (T6).
@@ -77,5 +81,5 @@ galileo-data/
 ## Decisions needed from Keno
 
 - OK to this layout and Parquet + DuckDB?
-- Where the data root lives (after the new drive is in).
+- Where the data root lives.
 - Which counters first (suggestion: physical + presence + possession, all of which exist today).

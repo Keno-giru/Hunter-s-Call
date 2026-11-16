@@ -120,3 +120,44 @@ Dated, scoped verdicts with numbers. Newest last.
   sync/cut, clip in/out/save/loop, help. Left panel slimmed: roster in team tabs with players never on the
   pitch folded away, quick-unit buttons moved to the menu, Board panel removed (its tools stay on the 2D
   stage row and in the menu), Footage panel sections fold (remembered), DRAW bar folded by default.
+- 2026-11-15, persistent players, accuracy pass (Keno: "duping and ghosting"). Measured on SNGS-196 against
+  SoccerNet's human track ids (`eval/identity_gsr.py`, exam clip, measure only): 21 people. Causes found:
+  tracker swaps of crossing team-mates; the greedy gap stitcher joining people after 1-4 s gaps (jumps up to
+  27 m); long-absence links chosen by raw distance (near random over 6+ s); ghosts frozen at the last sighting.
+  Fixes, persist mode only (default `track` unchanged): image cues in assignment (box overlap + box height),
+  no greedy stitching (gaps go to the global linker), direction/speed-aware links for gaps <= 1 s, team-shift
+  prediction for gaps > 3 s, ghosts move with the team's median shift, a ghost on a seen team-mate is hidden,
+  identities beyond the cap are shown only while seen. Result, SNGS-196: duplicates 22% -> 10% of ghosts,
+  ghost error median 7.7 -> 3.7 m (within 5 m: 32% -> 62%), purity 0.886 -> 0.944, 21 persistent
+  identities for 21 people. Synthetic: estimate median 7.6 -> 0.89 m (81% within 5 m), 22 persistent for 22.
+  Tried and kept off: team-shift links from 1 s (purity up, ghost error worse); image cues in default mode
+  (synthetic position median 0.180 = T0 limit). Remaining: 3 people still split; shirt numbers would fix most.
+- 2026-11-15, capture (Keno: physical, presence, possession first): `galileo.py capture` writes runs, frames,
+  stats, events, heatmap as Parquet (pyarrow; query with DuckDB), append-only per run_id, provenance on every
+  row; physical counters only from seen frames and short gaps; teleports (> 12 m/s) break segments; top speed
+  = best sustained 1 s. Metrica full match: outfield 10.3-11.2 km, top speeds 7.9-8.9 m/s, possession 53/47.
+  tests/py/test_capture.py 12/12. Output in datasets/capture (gitignored).
+- 2026-11-15, T0 re-runs after these changes: one run read footage_e2e 13/14 (live cut detector found a cut at
+  2600 ms, truth 2500) while the PC was under heavy background load; re-run on an idle machine PASS 11/11, same tracking
+  numbers. The live cut check is timing-sensitive under load (noted, gate unchanged).
+- 2026-11-16, repo hygiene (Keno approved editing the frozen manifest for this): eval/MANIFEST.json stored the
+  leakage training folder as an absolute local path; now `datasets/training` (relative to the hub). No exam
+  file, hash, label or review record changed; `realset.py verify` passes, T1 re-run PASS 8/8. `freeze` now
+  writes hub-relative paths, and `eval/run.py` writes logs with the home folder as ~ and the hub as <hub>.
+- 2026-11-16, hub (Keno): match picker (click the match title, or right-click > Change match): every match in
+  datasets/catalog.json as a card with a frame from its footage, length, source, footage and match-info chips;
+  opening one reloads the hub with its footage picture-in-picture over 3D/2D. Match info editor (right-click >
+  Match info): teams, competition, date, venue, match clock at the clip's first frame, score then, goals with
+  their clock; saved as match_info.json next to the pack through a local-only POST in tools/serve.py (path
+  checked to datasets/matches/*/pack.ghp.json, 64 KB max) and copied into the catalog. The HUD and timeline
+  show the real match clock and the score at the current moment (tested: 1-0 at 48:17, 2-0 at 48:33 after a
+  48:25 goal). SNGS-196 gets its clock from SoccerNet (2nd half 03:17 = 48:17); teams and goals left for Keno.
+  Trainer's-line callout made compact. Match info is read from the catalog (no 404 for matches without info:
+  the first version failed footage_e2e "no console errors"; fixed, T0 PASS 11/11).
+- 2026-11-16, data (Keno): SoccerTrack moved in from the downloaded Kaggle archive (videos, annotations, keypoints only;
+  GNSS and viz renders left there) to datasets/sources/soccertrack (gitignored, LGPL-3.0). `galileo.py
+  soccertrack` builds the drone match D_20220220_1: 60 x 30 s clips joined to one 720p video (30 min, static
+  camera), one homography from 65 landmarks (64 inliers, median 1.2 px at 4K), every labelled box to pitch
+  metres with SoccerTrack's own player ids (ground truth). 17,980 frames at 10 Hz, 22 players, 510 possession
+  spells. Capture: outfield 3.5-4.9 km in 30 min, top speeds 6.7-8.1 m/s (upper distances likely inflated by
+  box jitter; no GNSS for this match to check). Fisheye wide view (2 matches) not converted: needs a lens model.

@@ -8,6 +8,7 @@ Listens on 127.0.0.1 only: nothing is exposed to your network unless you pass --
 """
 
 import argparse
+import json
 import mimetypes
 import os
 import re
@@ -19,6 +20,23 @@ mimetypes.add_type("video/mp4", ".mp4")
 mimetypes.add_type("video/webm", ".webm")
 mimetypes.add_type("application/json", ".json")
 mimetypes.add_type("text/javascript", ".js")
+
+
+MATCH_INFO_KEYS = {"home", "away", "competition", "date", "venue", "clock", "score_start", "goals", "score_final", "notes"}
+
+
+def update_catalog(root, match_dir, info):
+    """Put the saved match info into datasets/catalog.json, so the hub's match picker shows it at once."""
+    cat_path = root / "datasets" / "catalog.json"
+    try:
+        cat = json.loads(cat_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    rel = match_dir.relative_to(root / "datasets").as_posix()
+    for m in cat.get("matches", []):
+        if m.get("dir") == rel:
+            m["info"] = info
+    cat_path.write_text(json.dumps(cat, indent=1, ensure_ascii=False), encoding="utf-8")
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -57,6 +75,39 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self._remaining = b - a + 1
         return f
+
+    # ---- the one write endpoint: match info next to a match's pack (local only, small, validated)
+    def do_POST(self):
+        if self.path.split("?")[0] != "/api/match-info":
+            return self.send_error(404)
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= 64 * 1024:
+                return self._json(413, {"error": "body must be 1 byte to 64 KB"})
+            body = json.loads(self.rfile.read(n).decode("utf-8"))
+            pack, info = body.get("pack"), body.get("info")
+            if not isinstance(pack, str) or not isinstance(info, dict):
+                return self._json(400, {"error": "need {pack: <relative path to pack.ghp.json>, info: {...}}"})
+            root = Path(self.directory).resolve()
+            target = (root / pack).resolve()
+            matches = (root / "datasets" / "matches").resolve()
+            if target.name != "pack.ghp.json" or not target.is_file() or matches not in target.parents:
+                return self._json(403, {"error": "pack must be a pack.ghp.json under datasets/matches"})
+            info = {k: v for k, v in info.items() if k in MATCH_INFO_KEYS}
+            out = target.parent / "match_info.json"
+            out.write_text(json.dumps(info, indent=1, ensure_ascii=False), encoding="utf-8")
+            update_catalog(root, target.parent, info)
+            return self._json(200, {"ok": True, "file": out.relative_to(root).as_posix()})
+        except (ValueError, UnicodeDecodeError) as e:
+            return self._json(400, {"error": f"bad JSON: {e}"})
+
+    def _json(self, code, obj):
+        data = json.dumps(obj).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def copyfile(self, src, dst):
         n = getattr(self, "_remaining", None)

@@ -93,6 +93,37 @@ function replayStats(r) {
   };
 }
 
+// Match info (hub editor, match_info.json next to the pack): names, clock at the clip's start, goals.
+// Clock strings are the match clock as a broadcast shows it ("48:17": the second half starts at 45:00).
+const parseClock = (c) => {
+  const m = /^\s*(\d+)(?:\+(\d+))?:(\d{1,2})\s*$/.exec(String(c ?? ""));
+  return m ? (+m[1] + (+m[2] || 0)) * 60 + +m[3] : null;
+};
+const fmtClock = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+function displayMeta(r) {
+  const m = r?.meta || {}, info = m.match_info || {};
+  const team = (k) => ({ ...(m[k] || {}), ...(info[k]?.name ? { name: info[k].name } : {}), ...(info[k]?.short ? { short: info[k].short } : {}) });
+  return { ...m, home: team("home"), away: team("away"), competition: info.competition || m.competition,
+    date: info.date || m.date, stadium: info.venue || m.stadium, score: info.score_final || m.score };
+}
+// -> { period, secs } on the match clock at replay time t (seconds) and replay period
+function matchClock(info, t, period) {
+  const start = parseClock(info?.clock?.clock);
+  if (start != null) return { period: +info.clock.period || 1, secs: start + t };
+  return { period, secs: t };
+}
+// -> [home, away] goals scored up to that moment, or null when the match info has no goal data
+function scoreAt(info, clk) {
+  if (!info || (!Array.isArray(info.goals) && !Array.isArray(info.score_start))) return null;
+  const s = [+(info.score_start?.[0] || 0), +(info.score_start?.[1] || 0)];
+  for (const g of info.goals || []) {
+    const gs = parseClock(g.clock), gp = +g.period || 1;
+    if (gs == null) continue;
+    if (gp < clk.period || (gp === clk.period && gs <= clk.secs)) s[g.team === "away" ? 1 : 0]++;
+  }
+  return s;
+}
+
 // ---------------------------------------------------------------- init
 export function init(ctx) {
   const { store, bus, mounts } = ctx;
@@ -207,7 +238,8 @@ export function init(ctx) {
   }
 
   // ------------------------------------------------------------ top bar
-  const titleBox = h("div", { class: "sh-match", "aria-live": "off" }, h("span", { class: "sh-dim" }, "Loading match…"));
+  const titleBox = h("button", { type: "button", class: "sh-match", "aria-live": "off", title: "Change match",
+    onclick: () => run("matches") }, h("span", { class: "sh-dim" }, "Loading match…"));
   const viewBtns = {};
   const viewGroup = h("div", { class: "sh-seg sh-views", role: "group", "aria-label": "Stage view" },
     VIEWS.map((v, i) => (viewBtns[v] = h("button", { type: "button", class: "sh-segbtn", "data-sh-view": v, "aria-pressed": "false",
@@ -227,12 +259,12 @@ export function init(ctx) {
 
   function renderTitle(r) {
     if (!r) { titleBox.replaceChildren(h("span", { class: "sh-dim" }, "No match loaded")); return; }
-    const m = r.meta || {}, sc = m.score || [];
+    const m = displayMeta(r), sc = m.score || [];
     const full = `${m.home?.name ?? "Home"} ${sc[0] ?? "–"}–${sc[1] ?? "–"} ${m.away?.name ?? "Away"}`;
     titleBox.title = `${full} · ${m.competition ?? ""} · ${fmtDate(m.date)}${m.stadium ? " · " + m.stadium : ""}`;
     titleBox.replaceChildren(
       h("span", { class: "sh-team" }, kitSwatch(m.home, "", "sh-kit sh-kit-sm"), h("b", null, m.home?.short ?? "HOME")),
-      h("span", { class: "sh-score-t" }, `${sc[0] ?? "–"}–${sc[1] ?? "–"}`),
+      h("span", { class: "sh-score-t" }, sc.length ? `${sc[0] ?? "–"}–${sc[1] ?? "–"}` : "v"),
       h("span", { class: "sh-team" }, h("b", null, m.away?.short ?? "AWAY"), kitSwatch(m.away, "", "sh-kit sh-kit-sm")),
       h("span", { class: "sh-dim sh-meta-line" }, [m.competition, fmtDate(m.date)].filter(Boolean).join(" · ")));
   }
@@ -467,7 +499,7 @@ export function init(ctx) {
       ["home", "away"].map((team) => h("button", { type: "button", role: "tab", class: "sh-segbtn", "data-team": team,
         "aria-selected": String(team === rosterTeam), "aria-pressed": String(team === rosterTeam),
         onclick: () => { prefs.set("rosterTeam", team); renderRoster(); } },
-        kitSwatch(R.meta[team], "", "sh-kit sh-kit-sm"), R.meta[team]?.short ?? team,
+        kitSwatch(R.meta[team], "", "sh-kit sh-kit-sm"), displayMeta(R)[team]?.short ?? team,
         h("span", { class: "sh-rcount" }, String(R.players.filter((p) => p.team === team && S.minutes[p.idx] > 0).length)))));
     const blocks = [rosterTeam].map((team) => {
       const kit = R.meta[team] || {};
@@ -565,7 +597,7 @@ export function init(ctx) {
 
   function renderHudStatic() {
     if (!R) return;
-    const m = R.meta, sc = m.score || [];
+    const m = displayMeta(R), sc = m.score || [];
     hudHomeSw.style.setProperty("--kit", m.home?.color || "#888"); hudAwaySw.style.setProperty("--kit", m.away?.color || "#888");
     setText(hudHome, m.home?.short ?? "HOME"); setText(hudAway, m.away?.short ?? "AWAY");
     setText(hudGoals, `${sc[0] ?? "–"}–${sc[1] ?? "–"}`);
@@ -607,8 +639,11 @@ export function init(ctx) {
     const st = ctx.state, pos = st.positions;
     if (!R || !pos) return;
     const t = st.time || 0;
-    setText(hudPer, st.period === 2 ? "2H" : "1H");
-    setText(hudClock, `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(Math.floor(t % 60)).padStart(2, "0")}`);
+    const info = R.meta.match_info, clk = matchClock(info, info?.clock ? t - (R.t[0] || 0) : t, st.period);
+    setText(hudPer, clk.period === 2 ? "2H" : clk.period > 2 ? "ET" : "1H");
+    setText(hudClock, fmtClock(clk.secs));
+    const live = scoreAt(info, clk);
+    if (live) { setText(hudGoals, `${live[0]}–${live[1]}`); setText(scoreTag, "at this moment"); scoreTag.title = "Score at this moment, from the match info (goals)"; }
     const pi = pos.poss, pp = pi >= 0 ? R.players[pi] : null;
     if (pp) { possSw.style.setProperty("--kit", R.meta[pp.team]?.color || "#888"); possSw.hidden = false; setText(possTxt, R.meta[pp.team]?.short ?? pp.team); setText(possWho, `${pp.number} ${pp.short || pp.name}`); }
     else { possSw.hidden = true; setText(possTxt, "—"); setText(possWho, ""); }
@@ -639,6 +674,7 @@ export function init(ctx) {
     lastLive = 0; requestAnimationFrame(() => updateLive(true));
   }
   store.on("replay", onReplay);
+  store.on("matchinfo", () => onReplay(store.get("replay")));
   store.on("selection", () => { syncRosterSel(); renderSelection(); });
   if (store.get("replay")) onReplay(store.get("replay"));
 

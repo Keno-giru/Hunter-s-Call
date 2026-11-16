@@ -373,7 +373,8 @@ def cmd_track(a):
     if not sc["calibration"]["keys"]:
         raise SystemExit("the clip has no calibration keys: calibrate it (hub, `calibrate`, then `camera`) first")
     say("tracking ...")
-    res = V.run(p, bp, home_colour=a.home_colour, home_side=a.home_side, progress=lambda i, n: say(f"  {i}/{n}"))
+    res = V.run(p, bp, home_colour=a.home_colour, home_side=a.home_side, progress=lambda i, n: say(f"  {i}/{n}"),
+                image_cues=a.persist, stitch_gaps=not a.persist)
     mid = a.match_id or f"video-{sc['clip']['id']}" + ("-persist" if a.persist else "")
     pack, stats, trows = V.to_pack(res, match_id=mid, fps_out=a.fps, persist=a.persist)
     if a.persist:
@@ -387,7 +388,8 @@ def cmd_track(a):
     V.write_csv(stats, d / "player_stats.csv")
     V.write_csv(trows, d / "tracks.csv")
     man = json.loads((d / "match.json").read_text())
-    man["linked_clips"] = [p.parent.relative_to(Path(a.root)).as_posix()] if p.parent.is_relative_to(Path(a.root)) else []
+    pr, rr = p.parent.resolve(), Path(a.root).resolve()
+    man["linked_clips"] = [pr.relative_to(rr).as_posix()] if pr.is_relative_to(rr) else []
     man["video"] = {"coverage": res["coverage"], "kits": res["kits"],
                     "teams": {k: sum(1 for v in res["teams"].values() if v[0] == k) for k in ("home", "away", "referee", "other")}}
     if sc.get("match_id") and sc.get("pack") and (p.parent / sc["pack"]).exists() and not a.no_eval:
@@ -402,6 +404,24 @@ def cmd_track(a):
         f"{len(pack['events'])} possession spells -> {d}")
     rel = p.parent.relative_to(HUB).as_posix() if p.parent.is_relative_to(HUB) else str(p.parent)
     say(f"open: http://localhost:8000/index.html?pack={Path(a.root).name}/matches/{mid}/pack.ghp.json&footage={rel}/{sc['clip']['file']}")
+
+
+def cmd_soccertrack(a):
+    from . import soccertrack as ST
+    ST.build(Path(a.root) / "sources" / "soccertrack", a.root, prefix=a.prefix, n_clips=a.clips, fps_out=a.fps, say=say)
+
+
+def cmd_capture(a):
+    from . import capture as K
+    out = Path(a.out) if a.out else Path(a.root) / "capture"
+    for m in a.match:
+        md = Path(m)
+        if not (md / "pack.ghp.json").exists():
+            md = Path(a.root) / "matches" / m
+        if not (md / "pack.ghp.json").exists():
+            raise SystemExit(f"no pack.ghp.json in {m} (pass a match folder or a match id under {Path(a.root) / 'matches'})")
+        r = K.capture(md, out, seg_min=a.segment_min)
+        say(f"{r['match_id']}: run {r['run_id']} -> {out}  " + ", ".join(f"{k} {v}" for k, v in r["rows"].items()))
 
 
 def cmd_clips(a):
@@ -624,6 +644,18 @@ def main(argv=None):
                    help="persistent players: link fragments into <= 11 per team, keep them on the pitch off camera "
                         "(estimated, det 0); default match id video-<clip>-persist")
     s.set_defaults(fn=cmd_track)
+
+    s = sub.add_parser("soccertrack", help="SoccerTrack drone view -> a match with footage and ground-truth tracking")
+    s.add_argument("--prefix", default="D_20220220_1", help="clip name prefix under top_view/videos")
+    s.add_argument("--clips", type=int, help="only the first n clips (30 s each)")
+    s.add_argument("--fps", type=float, default=10.0, help="pack frame rate")
+    s.set_defaults(fn=cmd_soccertrack)
+
+    s = sub.add_parser("capture", help="a match pack -> counted stats (physical, presence, possession) as Parquet")
+    s.add_argument("match", nargs="+", help="match folder(s) or id(s) under <root>/matches")
+    s.add_argument("--out", help="capture folder (default <root>/capture)")
+    s.add_argument("--segment-min", type=int, default=5, help="minute bins per period (0 = only match and halves)")
+    s.set_defaults(fn=cmd_capture)
 
     s = sub.add_parser("clips", help="event-centred training clips from a labelled clip")
     s.add_argument("clip")

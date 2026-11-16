@@ -114,6 +114,16 @@ def main(name):
 
     # 4. track -> hub pack
     run(PY, "tools/galileo.py", "track", clip_dir, "--no-eval", "--persist", "--match-id", f"video-{clip_dir.name}")
+    # match info: the clip's place on the match clock from SoccerNet ("2 - 03:17" = 2nd half, 48:17 on the clock);
+    # team names and goals are not in the labels: fill them in with the hub's Match info editor
+    mi = HUB / "datasets" / "matches" / f"video-{clip_dir.name}" / "match_info.json"
+    gt = str(info.get("game_time_start") or "")
+    if not mi.exists() and " - " in gt:
+        per, mmss = gt.split(" - ", 1)
+        mm, ss = (int(x) for x in mmss.split(":"))
+        mm += 45 * (int(per) - 1)
+        mi.write_text(json.dumps({"competition": f"SoccerNet-GSR game {info.get('game_id')} (teams not in the labels)",
+                                  "clock": {"period": int(per), "clock": f"{mm:02d}:{ss:02d}"}}, indent=1), encoding="utf-8")
     rel = clip_dir.relative_to(HUB).as_posix()
     print(f"\nopen: http://localhost:8000/index.html?pack=datasets/matches/video-{clip_dir.name}/pack.ghp.json"
           f"&footage={rel}/proxy.mp4&view=video   (after `python tools/serve.py`)")

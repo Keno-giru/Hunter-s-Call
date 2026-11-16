@@ -5,10 +5,10 @@ get Sample_Game_1/Sample_Game_1_RawEventsData.csv
 get Sample_Game_2/Sample_Game_2_RawTrackingData_Home_Team.csv
 get Sample_Game_2/Sample_Game_2_RawTrackingData_Away_Team.csv
 get Sample_Game_2/Sample_Game_2_RawEventsData.csv
-done: C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\sources\metrica
+done: <hub>\datasets\sources\metrica
 ++ .venv/Scripts/python tools/galileo.py convert metrica --game 1
 loading Metrica game 1 from local copy ...
-match metrica-sample-1: C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\matches\metrica-sample-1
+match metrica-sample-1: <hub>\datasets\matches\metrica-sample-1
 open: http://localhost:8000/index.html?pack=datasets/matches/metrica-sample-1/pack.ghp.json   (after `python tools/serve.py`)
 ++ .venv/Scripts/python tests/e2e/gen_broadcast.py datasets/matches/metrica-sample-1/pack.ghp.json tests/e2e/out/broadcast 20
 500 frames -> tests\e2e\out\broadcast\broadcast.mp4
@@ -19,7 +19,7 @@ detecting camera cuts ...
   2 cuts
 sync: offset +2.96 s
 labels: 10 events in video time -> labels.csv
-clip: C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\matches\metrica-sample-1\footage\synth-broadcast
+clip: <hub>\datasets\matches\metrica-sample-1\footage\synth-broadcast
 open: http://localhost:8000/index.html?footage=datasets/matches/metrica-sample-1/footage/synth-broadcast/proxy.mp4&pack=datasets/matches/metrica-sample-1/pack.ghp.json
 ++ C=datasets/matches/metrica-sample-1/footage/synth-broadcast
 ++ cp tests/e2e/out/broadcast/boxes.jsonl datasets/matches/metrica-sample-1/footage/synth-broadcast/
@@ -33,5 +33,5 @@ open: http://localhost:8000/index.html?footage=datasets/matches/metrica-sample-1
 tracking ...
   500/500
 eval vs provider tracking: {"frames": 250, "matched": 2521, "position_rmse_m": 0.316, "position_median_m": 0.18, "recall_on_screen": 0.996, "precision": 0.948, "track_purity": 0.89, "tracks_per_player": 1.53, "team_accuracy": 0.998, "video_players": 40, "provider_players_seen": 19}
-250 frames, 40 tracked players (40 with stats), 8 possession spells -> C:\Users\Gebruiker\Desktop\Galileo\Hunter-s-Call\Galileo Tactical Hub\datasets\matches\video-synth-broadcast
+250 frames, 40 tracked players (40 with stats), 8 possession spells -> <hub>\datasets\matches\video-synth-broadcast
 open: http://localhost:8000/index.html?pack=datasets/matches/video-synth-broadcast/pack.ghp.json&footage=datasets\matches\metrica-sample-1\footage\synth-broadcast/proxy.mp4

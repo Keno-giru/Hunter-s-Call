@@ -8,11 +8,11 @@ CVAT runs on this PC in Docker; no frame leaves the machine. One CVAT task per c
 Needs Docker Desktop running and about 6 GB free on C: for the containers.
 
 ```bash
-git clone https://github.com/cvat-ai/cvat C:/Users/Gebruiker/cvat
+git clone https://github.com/cvat-ai/cvat <your cvat folder>
 ```
 
 ```bash
-cd C:/Users/Gebruiker/cvat && docker compose up -d
+cd <your cvat folder> && docker compose up -d
 ```
 
 Create your login (you choose the password; it stays local):
@@ -86,7 +86,7 @@ frames: left toolbar > tag icon (Setup tag) > label `reviewed` > Tag. The exam c
 Actions > **Export task dataset** > format **CVAT for images 1.1**, Save images **off** > download the zip, then:
 
 ```bash
-python eval/cvat.py import gsr-SNGS-129 C:/Users/Gebruiker/Downloads/<export>.zip
+python eval/cvat.py import gsr-SNGS-129 <downloads folder>/<export>.zip
 ```
 
 It refuses partial exports and video-mode (track) exports, writes nothing in that case, and prints the

@@ -3355,7 +3355,7 @@
       },
       "leakage": {
         "train_dirs": [
-          "C:\\Users\\Gebruiker\\Desktop\\Galileo\\Hunter-s-Call\\Galileo Tactical Hub\\datasets\\training"
+          "datasets/training"
         ],
         "train_images": 0,
         "matches": 0

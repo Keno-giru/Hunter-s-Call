@@ -80,7 +80,7 @@ def _assign(cost, gate):
     return [(i, j) for i, j in zip(r, k) if c[i, j] < 1e6]
 
 
-def track_players(frames, *, gate_m=2.0, speed_m_s=9.0, lost_ms=1200, min_hits=4, kit_tol=30.0):
+def track_players(frames, *, gate_m=2.0, speed_m_s=9.0, lost_ms=1200, min_hits=4, kit_tol=30.0, image_cues=None):
     """frames: [(t_ms, [(x, y, conf, box, cls)])] -> list of Track (players, keepers, referees).
 
     box = (x1, y1, x2, y2, lab colour or None). A detection whose shirt colour is far (CIELAB) from a
@@ -102,6 +102,20 @@ def track_players(frames, *, gate_m=2.0, speed_m_s=9.0, lost_ms=1200, min_hits=4
         if len(active):                                        # gate grows with time since the track was last seen
             miss = np.array([(t - tr.last) / 1000.0 for tr in active])
             cost = cost / (gate_m + 0.5 * speed_m_s * miss)[:, None]
+            if image_cues:                                     # same picture a frame or two ago: boxes must agree too
+                for i, tr in enumerate(active):
+                    if t - tr.last > 200:
+                        continue
+                    lb = tr.box[-1]
+                    lh = max(1.0, lb[3] - lb[1])
+                    for j, d in enumerate(dets):
+                        b = d[3]
+                        ix = max(0.0, min(lb[2], b[2]) - max(lb[0], b[0]))
+                        iy = max(0.0, min(lb[3], b[3]) - max(lb[1], b[1]))
+                        inter = ix * iy
+                        iou = inter / max(1e-6, (lb[2] - lb[0]) * (lb[3] - lb[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter)
+                        dh = abs((b[3] - b[1]) - lh) / lh
+                        cost[i, j] = cost[i, j] * (1.0 - 0.5 * iou) + 0.5 * max(0.0, dh - 0.15)
             for i, tr in enumerate(active):
                 if tr.kit is None:
                     continue
@@ -184,8 +198,101 @@ def stitch(tracks, *, max_gap_ms=4000, speed_m_s=8.0, slack_m=2.5, colour_tol=28
     return out
 
 
+def _piece(tr, a, b, pid):
+    """Detections [a, b) of track tr as a new Track with id pid (same class votes, kit colours re-read)."""
+    p = Track(pid, tr.t[a], tr.x[a], tr.y[a], tr.conf[a], tr.box[a], tr.label)
+    p.t, p.x, p.y, p.conf, p.box = tr.t[a:b], tr.x[a:b], tr.y[a:b], tr.conf[a:b], tr.box[a:b]
+    p.cls = defaultdict(float, tr.cls)
+    p.hits, p.last = b - a, tr.t[b - 1]
+    p.colours = [bx[4] for bx in p.box if len(bx) > 4 and bx[4] is not None]
+    return p
+
+
+def split_at_encounters(tracks, teams, radius_m=1.5):
+    """Cut same-team tracks where two of them meet (closer than radius_m in the same frame): the tracker may have
+    swapped the two people there. Each encounter cuts both tracks at its middle frame; link_identities then
+    re-joins the pieces using running direction and speed, so a swap can be undone. -> (pieces, teams)."""
+    cuts = defaultdict(set)
+    by_side = defaultdict(list)
+    for tr in tracks:
+        side = teams.get(tr.id, ("other",))[0]
+        if side in ("home", "away"):
+            by_side[side].append(tr)
+    for trs in by_side.values():
+        idx = [{t: k for k, t in enumerate(tr.t)} for tr in trs]
+        for i in range(len(trs)):
+            for j in range(i + 1, len(trs)):
+                a, b = trs[i], trs[j]
+                if b.t[0] > a.t[-1] or a.t[0] > b.t[-1]:
+                    continue
+                common = sorted(set(idx[i]) & set(idx[j]))
+                close = [t for t in common
+                         if math.hypot(a.x[idx[i][t]] - b.x[idx[j][t]], a.y[idx[i][t]] - b.y[idx[j][t]]) < radius_m]
+                run = []
+                for t in close + [None]:
+                    if run and (t is None or t - run[-1] > 200):
+                        mid = run[len(run) // 2]
+                        cuts[a.id].add(idx[i][mid])
+                        cuts[b.id].add(idx[j][mid])
+                        run = []
+                    if t is not None:
+                        run.append(t)
+    out, new_teams = [], dict(teams)
+    for tr in tracks:
+        ks = sorted(k for k in cuts.get(tr.id, ()) if 0 < k < len(tr.t))
+        if not ks:
+            out.append(tr)
+            continue
+        bounds = [0] + ks + [len(tr.t)]
+        for n, (a, b) in enumerate(zip(bounds, bounds[1:])):
+            if b > a:
+                p = _piece(tr, a, b, tr.id * 100 + n + 1)
+                new_teams[p.id] = teams[tr.id]
+                out.append(p)
+    return out, new_teams
+
+
+def _vel(tr, end, window_ms=600):
+    """Mean velocity (m/s) over the first or last window_ms of a track; zero for a single point."""
+    t = tr.t
+    if end:
+        k = next((i for i in range(len(t) - 1, -1, -1) if t[-1] - t[i] >= window_ms), 0)
+        a, b = k, len(t) - 1
+    else:
+        k = next((i for i in range(len(t)) if t[i] - t[0] >= window_ms), len(t) - 1)
+        a, b = 0, k
+    dt = (t[b] - t[a]) / 1000.0
+    return np.array([(tr.x[b] - tr.x[a]) / dt, (tr.y[b] - tr.y[a]) / dt]) if dt > 0 else np.zeros(2)
+
+
+def _team_shift(tracks):
+    """-> function t_ms -> cumulative team shift (x, y) in metres: running sum of the median step of the team's
+    tracks seen at two consecutive sample times (a median over whoever is in view)."""
+    at = defaultdict(dict)
+    for tr in tracks:
+        for t, x, y in zip(tr.t, tr.x, tr.y):
+            at[t][tr.id] = (x, y)
+    ts = sorted(at)
+    D = np.zeros((len(ts), 2))
+    for k in range(1, len(ts)):
+        a, b = at[ts[k - 1]], at[ts[k]]
+        both = [i for i in b if i in a]
+        if both:
+            D[k] = D[k - 1] + np.median([(b[i][0] - a[i][0], b[i][1] - a[i][1]) for i in both], axis=0)
+        else:
+            D[k] = D[k - 1]
+    tarr = np.array(ts, float) if ts else np.zeros(1)
+
+    def shift(t):
+        if not ts:
+            return np.zeros(2)
+        return np.array([np.interp(t, tarr, D[:, 0]), np.interp(t, tarr, D[:, 1])])
+    return shift
+
+
 def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7.0, slack_m=3.0, colour_tol=28.0,
-                    max_cost=2.0, min_seconds=1.0):
+                    max_cost=2.0, min_seconds=1.0, split_m=1.5, vel_weight=0.5, vel_gap_s=1.0,
+                    flow_gap_s=3.0, flow_slack_m=4.0, flow_m_s=1.0):
     """Persistent players: chain each team's track fragments into at most 11 identities (1 keeper, 10 outfield).
 
     A link "B continues A" is possible when B starts after A ends (two fragments on screen together are two
@@ -203,8 +310,17 @@ def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7
     -> (groups, report); groups = [(side, unit, [Track, ...])], home first, keeper first, by first sighting.
     """
     from scipy.optimize import linear_sum_assignment
-    groups, rep = [], {"fragments": 0, "links": 0, "forced": 0, "over_cap": 0}
+    groups, rep = [], {"fragments": 0, "links": 0, "forced": 0, "over_cap": 0, "encounter_cuts": 0}
+    tracks = [tr for tr in tracks if tr.duration >= min_seconds]
+    if split_m:
+        n0 = len(tracks)
+        tracks, teams = split_at_encounters(tracks, teams, split_m)
+        rep["encounter_cuts"] = len(tracks) - n0
+    min_seconds = 0.0                                        # pieces of a kept track stay, however short
     col = {tr.id: (np.median(tr.colours, axis=0) if tr.colours else None) for tr in tracks}
+    vend = {tr.id: _vel(tr, True) for tr in tracks}
+    vstart = {tr.id: _vel(tr, False) for tr in tracks}
+    shift = {side: _team_shift([tr for tr in tracks if teams.get(tr.id, ("other",))[0] == side]) for side in ("home", "away")}
     BIG = 1e9
     for side in ("home", "away"):
         for gk in (True, False):
@@ -220,7 +336,15 @@ def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7
                     if fb.t[0] < fa.t[-1] or i == j:
                         continue
                     gap = (fb.t[0] - fa.t[-1]) / 1000.0
-                    c = math.hypot(fb.x[0] - fa.x[-1], fb.y[0] - fa.y[-1]) / (slack_m + speed_m_s * gap)
+                    if vel_weight and gap <= vel_gap_s:          # short gap: where it was heading, and how fast
+                        px, py = fa.x[-1] + vend[fa.id][0] * gap, fa.y[-1] + vend[fa.id][1] * gap
+                        c = math.hypot(fb.x[0] - px, fb.y[0] - py) / (slack_m + speed_m_s * gap)
+                        c += vel_weight * float(np.hypot(*(vend[fa.id] - vstart[fb.id]))) / 4.0
+                    elif flow_gap_s and gap > flow_gap_s:      # long absence: where the team's shift says it should be
+                        dx, dy = shift[side](fb.t[0]) - shift[side](fa.t[-1])
+                        c = math.hypot(fb.x[0] - fa.x[-1] - dx, fb.y[0] - fa.y[-1] - dy) / (flow_slack_m + flow_m_s * gap)
+                    else:
+                        c = math.hypot(fb.x[0] - fa.x[-1], fb.y[0] - fa.y[-1]) / (slack_m + speed_m_s * gap)
                     ca, cb = col[fa.id], col[fb.id]
                     if ca is not None and cb is not None and np.linalg.norm(ca - cb) > colour_tol:
                         c += 1.0
@@ -247,9 +371,12 @@ def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7
             rep["links"] += len(nxt)
             rep["forced"] += sum(1 for r, c in nxt.items() if C[r, c] > 1.0)
             rep["over_cap"] += max(0, len(chains) - cap)
-            groups += [(side, "GK" if gk else None, [pool[i] for i in ch]) for ch in chains]
+            # the cap's worth of chains with the most seen time persist; any extra is shown only while seen
+            chains.sort(key=lambda ch: -sum(pool[i].duration for i in ch))
+            groups += [(side, "GK" if gk else None, [pool[i] for i in ch], k >= cap) for k, ch in enumerate(chains)]
     groups.sort(key=lambda g: (g[0] != "home", g[1] != "GK", g[2][0].t[0]))
     rep["identities"] = len(groups)
+    rep["persistent_identities"] = sum(1 for g in groups if not g[3])
     return groups, rep
 
 
@@ -324,7 +451,8 @@ def _smooth(v, k):
     return np.convolve(vv, ker, mode="valid")
 
 
-def run(clip_path, boxes_path, *, step=1, home_colour=None, home_side=None, min_box_h=8, edge_px=2, progress=None):
+def run(clip_path, boxes_path, *, step=1, home_colour=None, home_side=None, min_box_h=8, edge_px=2, progress=None,
+        image_cues=False, stitch_gaps=True):
     """Clip sidecar + boxes JSONL -> dict with tracks, ball, possession and everything the writers need."""
     import cv2
     clip_path = Path(clip_path)
@@ -381,10 +509,11 @@ def run(clip_path, boxes_path, *, step=1, home_colour=None, home_side=None, min_
         if progress and len(frames) % 250 == 0:
             progress(len(frames), len(want))
     cap.release()
-    tracks = track_players(frames)
+    tracks = track_players(frames, image_cues=image_cues)
     for tr in tracks:                                          # kit samples gathered along each track
         tr.colours = [b[4] for b in tr.box if b[4] is not None]
-    tracks = stitch(tracks)
+    if stitch_gaps:                                            # persist mode leaves gaps to link_identities (global)
+        tracks = stitch(tracks)
     teams, kits = assign_teams(tracks, home_colour=home_colour, home_side=home_side)
     return {"sc": sc, "fps": fps, "times": [f[0] for f in frames], "tracks": tracks, "teams": teams, "kits": kits,
             "balls": balls, "views": views, "coverage": cover}
@@ -412,7 +541,70 @@ def ball_series(times, balls, max_speed=42.0, max_gap_ms=1000):
     return xy
 
 
+DUP_RADIUS_M = 2.0          # an estimate this close to a seen team-mate is taken to be that same person
+
+
+def hide_duplicates(pos, det, tracked, sides, radius=DUP_RADIUS_M):
+    """Hide an estimate (det 0 -> -1 for that frame) that stands on a team-mate the camera sees: it is almost
+    always the same person under a second identity (a split the linker could not join). -> samples hidden."""
+    n, nP = det.shape
+    hidden = 0
+    for k in range(n):
+        est = [c for c in range(nP) if det[k, c] == 0 and not tracked[k, c]]
+        if not est:
+            continue
+        seen = [c for c in range(nP) if tracked[k, c]]
+        for c in est:
+            for s in seen:
+                if sides[s] == sides[c] and np.hypot(*(pos[k, c] - pos[k, s])) < radius:
+                    det[k, c] = -1
+                    pos[k, c] = np.nan
+                    hidden += 1
+                    break
+    return hidden
+
+
 SHORT_GAP_MS = 1500          # an estimate across a gap up to this long counts as tracked (stats, possession)
+FLOW_GAIN = (1.0, 1.0)       # how much of the team's shift an off-camera player follows (x, y)
+
+
+def team_flow(pos, det, tracked, sides, gain=FLOW_GAIN, bounds=(54.5, 36.0)):
+    """Off-camera estimates that move with the team instead of standing still (in place, persist packs).
+
+    The team's shift D(t) is the running sum of the median frame-to-frame step of its players seen in both
+    frames; a median over whoever is in view, so it does not jump when the camera shows a different subset.
+    An estimate after the last sighting a is pos[a] + gain * (D(t) - D(a)); before the next sighting b it is
+    pos[b] - gain * (D(b) - D(t)); between two sightings the two are blended by time. Kept on the pitch
+    (+2 m). Only estimate frames (det 0 and not tracked) change; detections never move.
+    """
+    n, nP = det.shape
+    g = np.asarray(gain, float)
+    for side in set(sides):
+        cs = [c for c in range(nP) if sides[c] == side]
+        D = np.zeros((n, 2))
+        for k in range(1, n):
+            both = [c for c in cs if tracked[k, c] and tracked[k - 1, c]]
+            step = np.median(pos[k, both] - pos[k - 1, both], axis=0) if both else np.zeros(2)
+            D[k] = D[k - 1] + np.nan_to_num(step)
+        for c in cs:
+            seen = np.flatnonzero(tracked[:, c])
+            if not len(seen):
+                continue
+            est = np.flatnonzero((det[:, c] == 0) & ~tracked[:, c])
+            if not len(est):
+                continue
+            j = np.searchsorted(seen, est)
+            for k, jj in zip(est, j):
+                a = seen[jj - 1] if jj > 0 else None
+                b = seen[jj] if jj < len(seen) else None
+                fa = pos[a, c] + g * (D[k] - D[a]) if a is not None else None
+                fb = pos[b, c] - g * (D[b] - D[k]) if b is not None else None
+                if fa is not None and fb is not None:
+                    w = (k - a) / (b - a)
+                    p = fa * (1 - w) + fb * w
+                else:
+                    p = fa if fa is not None else fb
+                pos[k, c] = (np.clip(p[0], -bounds[0], bounds[0]), np.clip(p[1], -bounds[1], bounds[1]))
 
 
 def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None, persist=False):
@@ -437,17 +629,18 @@ def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None, persist=
     else:
         keep = [tr for tr in res["tracks"] if teams.get(tr.id, ("other",))[0] in ("home", "away") and tr.duration >= min_seconds]
         keep.sort(key=lambda tr: (teams[tr.id][0] != "home", tr.t[0]))
-        groups = [(*teams[tr.id], [tr]) for tr in keep]
+        groups = [(*teams[tr.id], [tr], True) for tr in keep]
     n, nP = len(tt), len(groups)
     pos = np.full((n, nP, 2), np.nan, np.float32)
     det = np.full((n, nP), -1, np.int8)
     tracked = np.zeros((n, nP), bool)                       # detected or a short gap: what stats may use
-    for c, (_, _, frags) in enumerate(groups):
+    for c, (_, _, frags, extra) in enumerate(groups):
+        keep_on = persist and not extra                     # this player stays on the pitch off camera
         tr_t = np.concatenate([np.array(f.t, float) for f in frags])
         xs = np.concatenate([_smooth(f.x, 3) for f in frags])
         ys = np.concatenate([_smooth(f.y, 3) for f in frags])
         for k, tv in enumerate(tt):
-            if not persist and (tv < tr_t[0] - 1 or tv > tr_t[-1] + 1):
+            if not keep_on and (tv < tr_t[0] - 1 or tv > tr_t[-1] + 1):
                 continue
             j = int(np.searchsorted(tr_t, tv))
             if j < len(tr_t) and abs(tr_t[j] - tv) <= 1:
@@ -457,15 +650,21 @@ def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None, persist=
             elif 0 < j < len(tr_t):
                 gap = tr_t[j] - tr_t[j - 1]
                 short = gap <= SHORT_GAP_MS and math.hypot(xs[j] - xs[j - 1], ys[j] - ys[j - 1]) <= 1.0 + 9.0 * gap / 1000
-                if short or persist:                         # short, physically possible gap; or a linked identity
+                if short or keep_on:                         # short, physically possible gap; or a linked identity
                     w = (tv - tr_t[j - 1]) / gap
                     pos[k, c] = (xs[j - 1] + (xs[j] - xs[j - 1]) * w, ys[j - 1] + (ys[j] - ys[j - 1]) * w)
                     det[k, c] = 0
                     tracked[k, c] = short
-            elif persist:                                     # before the first or after the last sighting: hold
+            elif keep_on:                                     # before the first or after the last sighting: hold
                 e = 0 if j == 0 else len(tr_t) - 1
                 pos[k, c] = (xs[e], ys[e])
                 det[k, c] = 0
+    if persist:
+        sides = [g[0] for g in groups]
+        team_flow(pos, det, tracked, sides)
+        hidden = hide_duplicates(pos, det, tracked, sides)
+        if link_rep is not None:
+            link_rep["hidden_duplicate_samples"] = hidden
     ball_all = ball_series(res["times"], res["balls"])
     ball = np.c_[ball_all[idx], np.zeros(n)]
     # possession: nearest team player within 1.5 m of the ball, two samples running; held while within 3 m
@@ -503,7 +702,7 @@ def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None, persist=
             views[k] = v
     players = []
     counts = {"home": 0, "away": 0}
-    for side, unit, frags in groups:
+    for side, unit, frags, _ in groups:
         tr = frags[0]
         counts[side] += 1
         players.append({"id": f"v{tr.id}", "team": side, "number": counts[side],
@@ -537,7 +736,7 @@ def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None, persist=
                            "det=1 detected on video, 0 interpolated inside a track, -1 not tracked (off camera or lost)",
          "video": {"clip": sc["clip"]["id"], "file": sc["clip"]["file"], "coverage": res["coverage"]}}
     if persist:
-        m["persistent"] = {**link_rep, "method": "link_identities: 1 keeper + 10 outfield per team, distance / reach + kit"}
+        m["persistent"] = {**link_rep, "method": "link_identities: 1 keeper + 10 outfield per team; image cues, encounter cuts, direction-aware and team-shift links; ghosts follow the team shift; ghosts on a seen team-mate hidden; extras beyond the cap shown only while seen"}
     m.update(meta or {})
     dt = step / vfps
     pack = build_pack(meta=m, players=players, fps=1.0 / dt, frame=frame_no, t=t, period=period, pos=pos, det=det,

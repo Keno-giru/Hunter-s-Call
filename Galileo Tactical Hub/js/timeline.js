@@ -133,7 +133,14 @@ export function init(ctx) {
   const tok = (name, fb) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fb;
   const nMax = () => (R ? R.n - 1 : 0);
   const cur = () => store.get("frame") || 0;
-  const clock = (f) => (R ? util.fmtClock(R.t[f], R.period[f]) : "--:--");
+  // the real match clock when the match info gives the clip's start ("48:17" in the 2nd half), else the pack's own
+  const clock = (f) => {
+    if (!R) return "--:--";
+    const c = R.meta?.match_info?.clock, m = /^\s*(\d+):(\d{1,2})\s*$/.exec(String(c?.clock ?? ""));
+    if (!m) return util.fmtClock(R.t[f], R.period[f]);
+    const s = +m[1] * 60 + +m[2] + (R.t[f] - R.t[0]), p = +c.period || 1;
+    return `${p === 2 ? "2H" : p > 2 ? "ET" : "1H"} ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  };
   const say = (text, toast = false) => { elStatus.textContent = text; if (toast && shell?.toast) { try { shell.toast(text); } catch (e) { /* ignore */ } } };
   const range = () => [inF ?? 0, outF ?? nMax()];
 

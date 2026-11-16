@@ -246,6 +246,9 @@ export function init(ctx) {
       { sep: true },
       { label: `Join selection as line${n ? ` (${n})` : ""}`, disabled: n < 2, run: () => svc.shell?.joinSelection?.() },
       { label: "Clear selection", disabled: !n, key: "", run: () => store.set("selection", []) },
+      { label: "Change match…", run: () => svc.shell?.run?.("matches") },
+      { label: "Match info (teams, clock, goals)…", run: () => svc.shell?.run?.("matchinfo") },
+      { sep: true },
       { label: "Commands and shortcuts", key: "?", run: () => svc.shell?.openHelp?.() },
     ];
   }

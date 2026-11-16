@@ -64,18 +64,51 @@ def test_teams_and_keepers_separate():
           ("away", None, (2,)) in sides and ("home", "GK", (3,)) in sides and ("home", None, (1, 4)) in sides, str(sides))
 
 
-def test_cap_forces_links_and_stays_soft():
-    # 10 outfield players seen all along, one leaves at 3 s and one new fragment appears far away at 6 s:
-    # beyond reach at 7 m/s (12 m in 3 s... 50 m), within max_cost x reach, so the cap links it (forced)
+def test_cap():
+    # 10 outfield players seen all along, one leaves at 3 s and one new fragment appears 39 m away at 6 s while
+    # the team stands still: impossible for one person, so no link; the extra is kept but does not persist
     frs = [frag(i, 0, 9000, -40 + 8 * i, -20) for i in range(1, 10)]
     frs += [frag(10, 0, 3000, -40, 20), frag(11, 6000, 9000, -1, 20)]
     teams = {f.id: ("home", None) for f in frs}
     groups, rep = V.link_identities(frs, teams)
-    check("the 10-outfield cap links a plausible stretch (forced)", len(groups) == 10 and rep["forced"] == 1, str(rep))
-    # 12 on screen at once can never be 10 people: nothing is dropped, the extras are reported
+    check("an impossible re-entry is not forced into the cap", rep["links"] == 0 and rep["persistent_identities"] == 10
+          and sum(1 for g in groups if g[3]) == 1, str(rep))
+    # same, but the re-entry is 4 m away 3 s later: one person, linked
+    frs[-1] = frag(11, 6000, 9000, -37, 18)
+    groups, rep = V.link_identities(frs, teams)
+    check("a plausible re-entry joins its player", rep["links"] == 1 and len(groups) == 10, str(rep))
+    # 12 on screen at once can never be 10 people: nothing is dropped, the extras are reported and not persisted
     frs = [frag(i, 0, 4000, -50 + 8 * i, 0) for i in range(1, 13)]
     groups, rep = V.link_identities(frs, {f.id: ("home", None) for f in frs})
-    check("the cap is soft: no detection is dropped", len(groups) == 12 and rep["over_cap"] == 2, str(rep))
+    check("the cap is soft: no detection is dropped", len(groups) == 12 and rep["over_cap"] == 2
+          and rep["persistent_identities"] == 10, str(rep))
+
+
+def test_team_flow_moves_ghosts():
+    # two team-mates walk +6 m in x; the third is seen only for the first second: its ghost walks with them
+    a = frag(1, 0, 10000, -20, 0, -14, 0)
+    b = frag(2, 0, 10000, -20, 10, -14, 10)
+    c = frag(3, 0, 1000, -20, -10, -19.4, -10)
+    teams = {1: ("home", None), 2: ("home", None), 3: ("home", None)}
+    pack, _, _ = V.to_pack(_res([a, b, c], teams), match_id="t", persist=True, min_seconds=0.5)
+    from galileo_data.pack import decode
+    d = decode(pack)
+    k = next(i for i, p in enumerate(pack["players"]) if p["video_track"] == 3)
+    check("an off-camera player moves with the team's shift", abs(d["pos"][-1, k, 0] - (-14.0)) < 0.8, f"{d['pos'][-1, k]}")
+
+
+def test_duplicate_hidden():
+    # a ghost held where a team-mate is seen is the same person twice: hidden for those frames
+    a = frag(1, 0, 3000, -10, 0)
+    b = frag(2, 5000, 10000, -10.5, 0.5)
+    c = frag(3, 0, 10000, 20, 0)
+    teams = {1: ("home", None), 2: ("home", None), 3: ("home", None)}
+    det = np.array([[1, -1], [0, 1]], np.int8)
+    pos = np.array([[[0, 0], [np.nan, np.nan]], [[0.5, 0], [0, 0]]], np.float32)
+    tracked = det == 1
+    n = V.hide_duplicates(pos, det, tracked, ["home", "home"])
+    check("a ghost standing on a seen team-mate is hidden", n == 1 and det[1, 0] == -1)
+    del a, b, c, teams
 
 
 def _res(tracks, teams, n_ms=10000, step=80):
