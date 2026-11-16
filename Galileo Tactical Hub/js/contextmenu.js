@@ -214,6 +214,10 @@ export function init(ctx) {
     return () => [
       { row: [["off", "Off"], ["pip", "PiP"], ["full", "Full"]].map(([k, l]) => ({ label: l, pressed: f.getMode?.() === k, keep: true, run: () => f.setMode(k) })), label: "Display" },
       { row: [-1, -0.1, 0.1, 1].map((s) => ({ label: `${s > 0 ? "+" : "−"}${Math.abs(s)}`, title: `Nudge offset ${s > 0 ? "+" : ""}${s} s`, keep: true, run: () => f.nudge(s) })), label: "Nudge" },
+      ...(f.layers ? (() => {
+        const scr = f.getMode?.() === "pip" ? "pip" : "full", L = f.layers()[scr], any = Object.values(L).some(Boolean);
+        return [{ label: `Overlay on ${scr === "pip" ? "PiP" : "full stage"}: ${any ? "on" : "off"}`, checked: any, run: () => f.setAllLayers(scr, !any) }];
+      })() : []),
       { label: "Sync here", run: () => f.syncHere() },
       { label: "Mark camera cut here", run: () => f.cuts?.mark?.() },
       { label: `Mute`, checked: !!f.video.muted, disabled: mode === "off", run: () => { f.video.muted = !f.video.muted; } },

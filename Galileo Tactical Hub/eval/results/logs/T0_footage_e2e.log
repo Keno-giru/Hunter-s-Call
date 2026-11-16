@@ -10,7 +10,7 @@ PASS  no calibration inside the cut shot
 PASS  the badge says why                                      
 PASS  a rectangle dragged on the video lands in pitch metres  err=0.045 m
 PASS  the overlay warp has a renderer                         gl
-PASS  cut detection finds both cuts within 2 frames           found [2040, 2520], truth [2000, 2500]
+PASS  cut detection finds both cuts within 2 frames           found [2000, 2520], truth [2000, 2500]
 PASS  no console errors                                       
 
 14/14 gates passed

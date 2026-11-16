@@ -406,6 +406,12 @@ def cmd_track(a):
     say(f"open: http://localhost:8000/index.html?pack={Path(a.root).name}/matches/{mid}/pack.ghp.json&footage={rel}/{sc['clip']['file']}")
 
 
+def cmd_footage_library(a):
+    from . import library as L
+    out = Path(a.out) if a.out else HUB.parents[1] / "Footage"
+    L.build(a.root, out, say=say)
+
+
 def cmd_soccertrack(a):
     from . import soccertrack as ST
     ST.build(Path(a.root) / "sources" / "soccertrack", a.root, prefix=a.prefix, n_clips=a.clips, fps_out=a.fps, say=say)
@@ -644,6 +650,10 @@ def main(argv=None):
                    help="persistent players: link fragments into <= 11 per team, keep them on the pitch off camera "
                         "(estimated, det 0); default match id video-<clip>-persist")
     s.set_defaults(fn=cmd_track)
+
+    s = sub.add_parser("footage-library", help="one folder with every video (hard links / junctions, no copies)")
+    s.add_argument("--out", help="folder (default: Footage next to the repo clone)")
+    s.set_defaults(fn=cmd_footage_library)
 
     s = sub.add_parser("soccertrack", help="SoccerTrack drone view -> a match with footage and ground-truth tracking")
     s.add_argument("--prefix", default="D_20220220_1", help="clip name prefix under top_view/videos")

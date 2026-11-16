@@ -251,6 +251,10 @@ const CSS = `
 .gfoot-badge { position: absolute; left: 0.5rem; bottom: 0.5rem; padding: 0.15rem 0.45rem; background: rgba(10,15,21,0.82);
   border: 1px solid var(--line-2); color: var(--fg-2); font: 400 11px/1.4 var(--mono); pointer-events: none; max-width: calc(100% - 1rem); }
 .gfoot-badge:empty { display: none; }
+.gfoot-unlinked { position: absolute; left: 0.5rem; right: 0.5rem; top: 0.5rem; padding: 0.3rem 0.5rem; background: rgba(60, 14, 14, 0.88);
+  border-left: 3px solid var(--crit, #d03b3b); color: #fff; font: 600 11px/1.35 var(--mono); border-radius: 3px; pointer-events: none; }
+.gfoot-unlinked[hidden] { display: none; }
+.gfoot-pip-body .gfoot-badge { display: none; }   /* calibration notes belong to the full stage, not the small screen */
 .gfoot-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 0.6rem; text-align: center; color: var(--fg-2); padding: 1rem; }
 .gfoot-empty strong { color: var(--fg); font: 600 15px/1.3 var(--cond); letter-spacing: 0.04em; text-transform: uppercase; }
 .gfoot-stage { position: absolute; inset: 0; background: var(--ink); }
@@ -283,6 +287,7 @@ const CSS = `
 .gfoot-sec > summary h4 { margin: 0; border: 0; padding: 0; }
 .gfoot-note { color: var(--fg-2); font-size: 11px; margin: 0; }
 .gfoot-warn { color: var(--fg); font-size: 11px; margin: 0; border-left: 2px solid var(--warn); padding-left: 0.45rem; }
+.gfoot-lbl { min-width: 5.5em; color: var(--fg-2); font-size: 11px; }
 .gfoot-row { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
 .gfoot-row > label { color: var(--fg-2); font-size: 11px; }
 .gfoot-btn { font: inherit; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line-2); padding: 0.2rem 0.5rem; cursor: pointer; border-radius: 2px; }
@@ -335,21 +340,27 @@ export function init(ctx) {
   const warper = createWarper();                               // the shared ground layer, warped through H(t)
   warper.el.classList.add("gfoot-warp");
   const badge = h("div", { class: "gfoot-badge", role: "status" });
+  // shown when the video is not this match's footage: the 3D and the video are then NOT in sync
+  const unlinked = h("div", { class: "gfoot-unlinked", role: "status", hidden: true });
+  let linkState = "unknown";                                   // linked | unlinked | unknown (no catalog)
   const fileInput = h("input", { type: "file", accept: "video/*", hidden: true, "aria-label": "Select footage file" });
   const pickBtn = () => h("button", { class: "gfoot-btn", type: "button", onclick: () => fileInput.click() }, "Select footage…");
   const empty = h("div", { class: "gfoot-empty" },
     h("strong", null, "No footage open"),
     h("span", null, "Drop a video file here, or"), pickBtn(),
     h("span", { class: "gfoot-note" }, "Open only footage you have the right to use. It stays on this machine."));
-  const wrap = h("div", { class: "gfoot-wrap" }, video, warper.el, canvas, badge, empty, fileInput);
+  const wrap = h("div", { class: "gfoot-wrap" }, video, warper.el, canvas, badge, unlinked, empty, fileInput);
   const stage = h("div", { class: "gfoot-stage" });
   mounts.video.append(stage);
 
   const pipTitle = h("span", { class: "gfoot-pip-title" }, "Footage");
-  const pipHead = h("div", { class: "gfoot-pip-head", title: "Drag to move; snaps to the nearest corner" }, pipTitle,
+  const pipLayersBtn = h("button", { class: "gfoot-btn is-icon", type: "button", title: "Overlay on this small screen (pitch lines, players, board)",
+    "aria-label": "Toggle the overlay on the picture-in-picture video", "aria-pressed": "false", onclick: (e) => { e.stopPropagation(); setAllLayers("pip", !anyLayer("pip")); } }, "◫");
+  const pipHead = h("div", { class: "gfoot-pip-head", title: "Drag to move; snaps to the nearest corner" }, pipTitle, pipLayersBtn,
     h("button", { class: "gfoot-btn is-icon", type: "button", title: "Full stage", "aria-label": "Show footage on the full stage", onclick: () => setMode("full") }, "⤢"),
     h("button", { class: "gfoot-btn is-icon", type: "button", title: "Close", "aria-label": "Close picture-in-picture", onclick: () => setMode("off") }, "✕"));
   const pipBody = h("div", { class: "gfoot-pip-body" });
+  function syncPipLayers() { pipLayersBtn.setAttribute("aria-pressed", String(anyLayer("pip"))); }
   const grip = h("div", { class: "gfoot-grip", title: "Drag to resize" });
   const pip = h("div", { class: "gfoot-pip", hidden: true, role: "group", "aria-label": "Footage picture-in-picture" }, pipHead, pipBody, grip);
   const drop = h("div", { class: "gfoot-drop", hidden: true }, "Drop video to open");
@@ -361,7 +372,16 @@ export function init(ctx) {
   let objUrl = null, hasVideo = false, clock = null, pendingSeek = null;
   let shell = null;
   let layoutKey = "", drawnKey = "", overlayRev = 0;
-  const show = { players: true, lines: true, overlays: true };
+  // overlay layers per screen (remembered): full stage on, picture-in-picture off so the small video stays clean
+  const LAYERS_KEY = "galileo.hub.footage.layers.v1";
+  const layers = { full: { players: true, lines: true, overlays: true }, pip: { players: false, lines: false, overlays: false } };
+  try { const v = JSON.parse(localStorage.getItem(LAYERS_KEY) || "null"); if (v?.full && v?.pip) { Object.assign(layers.full, v.full); Object.assign(layers.pip, v.pip); } } catch { /* private mode */ }
+  const saveLayers = () => { try { localStorage.setItem(LAYERS_KEY, JSON.stringify(layers)); } catch { /* private mode */ } };
+  const screenKey = () => (mode === "pip" ? "pip" : "full");
+  const shown = () => layers[screenKey()];
+  function setLayer(scr, k, on) { layers[scr][k] = !!on; saveLayers(); refreshPanel(); syncPipLayers(); ctx.invalidate?.(); }
+  function setAllLayers(scr, on) { for (const k of ["players", "lines", "overlays"]) layers[scr][k] = !!on; saveLayers(); refreshPanel(); syncPipLayers(); ctx.invalidate?.(); }
+  const anyLayer = (scr) => Object.values(layers[scr]).some(Boolean);
   const calib = { active: false, points: new Map(), H: null, err: null, msg: "", atMs: null };
   let cal = null, calKey = "", footRev = 0, warpOk = false, mediaMs = -1, badgeKey = "";   // H(t) for the picture on screen
   const cutDetect = { on: false, found: 0, lastSample: 0 };
@@ -416,6 +436,7 @@ export function init(ctx) {
           if (video.videoWidth && video.videoHeight) pipBody.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
           if (mode === "off") setMode("pip"); else syncVideo();
           layoutKey = ""; refreshPanel();
+          checkLink(abs ? abs.href : src).catch(() => {});
           (abs ? findSidecar(abs, name, saved) : Promise.resolve()).catch(() => {}).finally(() => resolve(footage()));
         } else {
           hasVideo = false; empty.hidden = false; video.removeAttribute("src"); video.load();
@@ -432,7 +453,35 @@ export function init(ctx) {
       if (old) URL.revokeObjectURL(old);                        // revoke the replaced object URL
     });
   }
-  fileInput.addEventListener("change", () => { const f = fileInput.files?.[0]; if (f) open(f).catch(() => {}); fileInput.value = ""; });
+  // A picked file is checked against the catalog first: this match's video opens from the server (so its sync and
+  // calibration load with it); another match's video offers to open that match; an unknown video plays unlinked.
+  async function pickFile(f) {
+    const svc = ctx.has?.("matches") ? await ctx.need("matches") : null;
+    const own = svc ? await svc.resolveFootage({ size: f.size }) : null;
+    if (own?.current) return open(own.url);
+    if (own && window.confirm(`"${f.name}" is the footage of ${own.title}, not of the match open now.\n\nOpen ${own.title} with it, so the 3D and the video stay in sync?`)) {
+      location.assign(own.href);
+      return null;
+    }
+    return open(f);
+  }
+  fileInput.addEventListener("change", () => { const f = fileInput.files?.[0]; if (f) pickFile(f).catch(() => {}); fileInput.value = ""; });
+  async function checkLink(src) {
+    const svc = ctx.has?.("matches") ? await ctx.need("matches") : null;
+    if (!svc || !window.__hubPackPath) { linkState = "unknown"; return refreshLink(); }
+    const own = await svc.resolveFootage(typeof src === "string" ? { url: src } : { size: src.size });
+    linkState = own?.current ? "linked" : "unlinked";
+    refreshLink(own);
+  }
+  function refreshLink(own) {
+    const f = footage();
+    const handLinked = !!f?.keys?.length && f?.offset != null && linkState === "unlinked" && f.handLinked;
+    const show = hasVideo && linkState === "unlinked" && !handLinked;
+    unlinked.hidden = !show;
+    if (show) unlinked.textContent = own ? `This video is ${own.title}, not this match: the 3D is not in sync. Open its match from the match picker.`
+      : "This video is not linked to this match: the 3D is not in sync. Open the match it belongs to, or calibrate and sync it here.";
+    wrap.dataset.linked = linkState;
+  }
 
   // ---------------------------------------------------------------- clip.json (galileo-footage sidecar)
   // The contract with tools/galileo.py: sync offsets, calibration keys (pitch m -> px of calibration.size),
@@ -930,13 +979,14 @@ export function init(ctx) {
     const bk = `${!!cal}|${!!cal?.weak}|${calib.active}`;
     if (bk !== badgeKey) { badgeKey = bk; refreshBadge(); }
     const H = calib.active ? calib.H : cal?.H || null;
-    const key = `${st.paintedVersion}|${overlayRev}|${calib.active}|${show.players}${show.lines}${show.overlays}|${ck}`;
+    const show = shown();
+    const key = `${st.paintedVersion}|${overlayRev}|${calib.active}|${mode}|${show.players}${show.lines}${show.overlays}|${ck}`;
     if (!changed && key === drawnKey) return;
     drawnKey = key;
     // 1. the shared ground layer, warped onto the grass (under everything else)
     warper.resize(lay.W, lay.H, lay.dpr);
     warpOk = false;
-    if (hasVideo && H && show.overlays && !calib.active) {
+    if (hasVideo && H && show.overlays && !calib.active && wrap.dataset.linked !== "unlinked") {
       warpOk = warper.draw({
         src: ctx.ground.overlay, M: groundToScreen(H, ctx.ground, ctx.PITCH, lay), version: ctx.ground.version,
         alpha: cal?.weak ? 0.35 : 1, clip: { x: lay.ox, y: lay.oy, w: video.videoWidth * lay.s, h: video.videoHeight * lay.s },
@@ -951,7 +1001,7 @@ export function init(ctx) {
     if (H) {
       if (cal?.weak && !calib.active) g.globalAlpha = 0.5;
       if (show.lines || calib.active) drawPitchLines(g, H);
-      if (show.players && st.replay && st.positions && !calib.active) {
+      if (show.players && st.replay && st.positions && !calib.active && wrap.dataset.linked !== "unlinked") {
         if (!warpOk || !show.overlays) drawUnits(g, H, st.positions);   // the warped layer already carries the unit lines
         drawPlayers(g, H, st.replay, st.positions);
       }
@@ -1003,7 +1053,8 @@ export function init(ctx) {
     ui.scRead = h("p", { class: "gfoot-read" });
     ui.scImport = h("button", { class: "gfoot-btn", type: "button", onclick: () => jsonInput.click() }, "Import…");
     ui.scExport = h("button", { class: "gfoot-btn", type: "button", onclick: () => downloadSidecar() }, "Export clip.json");
-    const tog = (k, label) => (ui["show_" + k] = h("button", { class: "gfoot-btn", type: "button", "aria-pressed": "true", onclick: () => { show[k] = !show[k]; refreshPanel(); } }, label));
+    const tog = (scr, k, label) => (ui[`show_${scr}_${k}`] = h("button", { class: "gfoot-btn", type: "button", "aria-pressed": "true",
+      onclick: () => setLayer(scr, k, !layers[scr][k]) }, label));
     ui.calBox = h("div", { style: "display:grid;gap:0.45rem" },
       h("p", { class: "gfoot-note" }, "Pause on a clear frame. Choose a landmark, then click it on the video. Four or more, spread over the pitch. Left = −x end, top = +y touchline, as on the 2D board."),
       h("div", { class: "gfoot-row" }, ui.lm), ui.pts, ui.err, h("div", { class: "gfoot-row" }, ui.apply, ui.clearPts));
@@ -1024,6 +1075,12 @@ export function init(ctx) {
       ui.name,
       h("h4", null, "Display"),
       h("div", { class: "gfoot-row", role: "group", "aria-label": "Footage display mode" }, modeBtn("off", "Off"), modeBtn("pip", "PiP"), modeBtn("full", "Full stage"), ui.mute),
+      h("h4", null, "Overlay on the video"),
+      h("div", { class: "gfoot-row", role: "group", "aria-label": "Overlay on the full-stage video" }, h("label", { class: "gfoot-lbl" }, "Full stage"),
+        tog("full", "lines", "Pitch lines"), tog("full", "players", "Players"), tog("full", "overlays", "Board")),
+      h("div", { class: "gfoot-row", role: "group", "aria-label": "Overlay on the picture-in-picture video" }, h("label", { class: "gfoot-lbl" }, "PiP"),
+        tog("pip", "lines", "Pitch lines"), tog("pip", "players", "Players"), tog("pip", "overlays", "Board")),
+      h("p", { class: "gfoot-note" }, "Board = everything on the 2D board (drawings, unit lines, pitch control, heatmaps). The small PiP screen starts clean; the ◫ button on it switches its overlay."),
       sec("Sync to match clock", false,
       ui.read,
       h("div", { class: "gfoot-row", role: "group", "aria-label": "Nudge offset" }, nb(-1), nb(-0.1), nb(0.1), nb(1),
@@ -1045,9 +1102,7 @@ export function init(ctx) {
       ui.scRead,
       h("div", { class: "gfoot-row" }, ui.scImport, ui.scExport),
       h("p", { class: "gfoot-note" }, "clip.json carries this clip's sync, calibration keys and cuts. It loads by itself when the video is opened from a dataset folder. After calibrating here, Export and save it next to the video.")),
-      sec("Overlay on the video", false,
-      h("div", { class: "gfoot-row", role: "group", "aria-label": "Overlay layers" }, tog("overlays", "Board overlays"), tog("players", "Players"), tog("lines", "Pitch markings")),
-      h("p", { class: "gfoot-note" }, "Board overlays = everything on the 2D board: drawings, unit lines, pitch control, Voronoi, heatmaps. Once a frame is calibrated, the drawing tools work straight on the video.")));
+      h("p", { class: "gfoot-note" }, "Once a frame is calibrated, the drawing tools work straight on the full-stage video."));
   }
   function refreshPanel() {
     if (!ui.name) return;
@@ -1063,7 +1118,8 @@ export function init(ctx) {
     ui.dropH.hidden = !keys.length || calib.active;
     ui.calBox.hidden = !calib.active;
     ui.fixed.setAttribute("aria-pressed", String(!!f?.fixed)); ui.fixed.disabled = !hasVideo;
-    for (const k of ["players", "lines", "overlays"]) ui["show_" + k].setAttribute("aria-pressed", String(show[k]));
+    for (const scr of ["full", "pip"]) for (const k of ["players", "lines", "overlays"]) ui[`show_${scr}_${k}`].setAttribute("aria-pressed", String(layers[scr][k]));
+    syncPipLayers();
     ui.scImport.disabled = ui.scExport.disabled = !hasVideo;
     ui.scRead.textContent = !hasVideo ? "Open footage first."
       : sidecar ? `${sidecar.clip?.id || "clip"}${sidecar.match_id ? ` · match ${sidecar.match_id}` : ""} · ${(sidecar.labels || []).length} labels${sidecar.provenance?.licence ? `\nlicence: ${sidecar.provenance.licence}` : ""}`
@@ -1127,7 +1183,8 @@ export function init(ctx) {
   // ---------------------------------------------------------------- service, shell panel, commands
   const api = {
     open, setOffset, setHomography,
-    setMode, getMode: () => mode, syncHere, nudge, video, stats,
+    setMode, getMode: () => mode, syncHere, nudge, video, stats, linkState: () => linkState,
+    layers: () => JSON.parse(JSON.stringify(layers)), setLayer, setAllLayers,
     videoTime: (f = frame()) => (clock ? videoTimeFor(clock, footage(), f) : 0),
     replayTime: (f = frame()) => (clock ? clock.time(f) : 0),
     calibration: {

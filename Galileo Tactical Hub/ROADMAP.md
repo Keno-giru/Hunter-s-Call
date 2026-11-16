@@ -161,3 +161,28 @@ Dated, scoped verdicts with numbers. Newest last.
   metres with SoccerTrack's own player ids (ground truth). 17,980 frames at 10 Hz, 22 players, 510 possession
   spells. Capture: outfield 3.5-4.9 km in 30 min, top speeds 6.7-8.1 m/s (upper distances likely inflated by
   box jitter; no GNSS for this match to check). Fisheye wide view (2 matches) not converted: needs a lens model.
+- 2026-11-16, persistence bench (eval/persist_bench.py): real movement with true ids (SoccerTrack drone match, and
+  `all` = SoccerTrack + Metrica + 7 IDSSE matches) filmed by a virtual broadcast camera (+-20 m, follows the ball,
+  random dropouts). Linker defaults now chosen on it: team-shift links from 1 s, error growth 1.5 m/s, no
+  encounter cuts, no role term (5 min, 2 seeds: purity 0.64-0.68 -> 0.74-0.77, duplicates 21-22% -> 11-15%,
+  ghost median 5.1-5.5 -> 3.6-3.9 m). Over a full 30 min every setting collapses (purity 0.28-0.39, ghost 14-16 m):
+  geometry alone cannot hold identities for a match; jersey numbers / appearance re-ID are needed (research
+  report kept locally). SNGS-196 with the new defaults: purity 0.944 -> 0.966, duplicates 10 -> 13%,
+  ghost 3.7 -> 4.6 m (one 30 s clip; the bench outweighs it). Role-in-link-cost and encounter cuts both hurt
+  (also the literature's finding).
+- 2026-11-16, runs (tools/galileo_data/runs.py, capture movement_runs): runs >= 4 m/s for >= 1 s on tracked frames;
+  kind (attacking/carry/defensive, team possession held through passes), forward metres, in behind, shape
+  (straight/curved/double incl. check-away), channel, marker pull, outcome served/decoy/unserved/turnover.
+  Movement proxies only (no gesture layer), unvalidated rules until a hand-labelled run exam exists.
+  tests/py/test_runs.py 11/11.
+- 2026-11-16, data (Keno): 7 IDSSE Bundesliga matches converted (2.45 GB streamed, raw not kept, ~15 MB per match);
+  12 SoccerNet-GSR clips fetched (2 per non-exam game 2/3/4/5/6/9, 2.3 GB). Footage library
+  (`galileo.py footage-library`): one folder next to the repo with every video as hard links / junctions
+  (no copies); GSR clips rendered once to 720p.
+- 2026-11-16, hub (Keno): footage belongs to its match. A picked video is recognised by size against the catalog
+  (clips now carry bytes): this match's video reopens from the server with its sync and calibration; another
+  match's video offers to open that match; an unknown video plays with a "not in sync" banner and no player or
+  board overlay. Tested on Fortuna Duesseldorf v 1. FC Nuernberg (IDSSE J03WPY) with a 60 s synthetic broadcast
+  rendered from its tracking (labelled synthetic): match 20.0 s = video 23.0 s (3 s lead), linked; SNGS-196's video
+  on it: banner, no overlay; hand-picked files: own -> server path with 290 keys, other -> switch offered/accepted.
+  Team tags skip numbers and club words (1. FC Nuernberg -> NUE as NÜR, FC St. Pauli -> STP).

@@ -291,8 +291,10 @@ def _team_shift(tracks):
 
 
 def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7.0, slack_m=3.0, colour_tol=28.0,
-                    max_cost=2.0, min_seconds=1.0, split_m=1.5, vel_weight=0.5, vel_gap_s=1.0,
-                    flow_gap_s=3.0, flow_slack_m=4.0, flow_m_s=1.0):
+                    max_cost=2.0, min_seconds=1.0, split_m=0.0, vel_weight=0.5, vel_gap_s=1.0,
+                    flow_gap_s=1.0, flow_slack_m=4.0, flow_m_s=1.5, role_weight=0.0, role_scale_m=8.0, role_span_s=10.0):
+    # defaults chosen on eval/persist_bench.py (SoccerTrack, virtual camera; 2 x 5 min + 30 min, 2026-11-16):
+    # team-shift links from 1 s with 1.5 m/s error growth; encounter cuts and role-in-link-cost off (both hurt)
     """Persistent players: chain each team's track fragments into at most 11 identities (1 keeper, 10 outfield).
 
     A link "B continues A" is possible when B starts after A ends (two fragments on screen together are two
@@ -321,6 +323,19 @@ def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7
     vend = {tr.id: _vel(tr, True) for tr in tracks}
     vstart = {tr.id: _vel(tr, False) for tr in tracks}
     shift = {side: _team_shift([tr for tr in tracks if teams.get(tr.id, ("other",))[0] == side]) for side in ("home", "away")}
+
+    def role_of(tr, end):
+        """Mean position in the team frame (pos - team shift) over the last / first role_span_s of a track."""
+        side = teams.get(tr.id, ("other",))[0]
+        if side not in shift:
+            return None
+        t0 = tr.t[-1] - role_span_s * 1000 if end else tr.t[0]
+        t1 = tr.t[-1] if end else tr.t[0] + role_span_s * 1000
+        pts = [(x, y, t) for x, y, t in zip(tr.x, tr.y, tr.t) if t0 <= t <= t1]
+        sh = shift[side]
+        return np.mean([(x - sh(t)[0], y - sh(t)[1]) for x, y, t in pts], axis=0) if pts else None
+    rend = {tr.id: role_of(tr, True) for tr in tracks} if role_weight else {}
+    rstart = {tr.id: role_of(tr, False) for tr in tracks} if role_weight else {}
     BIG = 1e9
     for side in ("home", "away"):
         for gk in (True, False):
@@ -343,6 +358,9 @@ def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7
                     elif flow_gap_s and gap > flow_gap_s:      # long absence: where the team's shift says it should be
                         dx, dy = shift[side](fb.t[0]) - shift[side](fa.t[-1])
                         c = math.hypot(fb.x[0] - fa.x[-1] - dx, fb.y[0] - fa.y[-1] - dy) / (flow_slack_m + flow_m_s * gap)
+                        ra, rb = rend.get(fa.id), rstart.get(fb.id)
+                        if role_weight and ra is not None and rb is not None:   # same role in the team shape?
+                            c += role_weight * float(np.hypot(*(ra - rb))) / role_scale_m
                     else:
                         c = math.hypot(fb.x[0] - fa.x[-1], fb.y[0] - fa.y[-1]) / (slack_m + speed_m_s * gap)
                     ca, cb = col[fa.id], col[fb.id]
@@ -568,14 +586,22 @@ SHORT_GAP_MS = 1500          # an estimate across a gap up to this long counts a
 FLOW_GAIN = (1.0, 1.0)       # how much of the team's shift an off-camera player follows (x, y)
 
 
-def team_flow(pos, det, tracked, sides, gain=FLOW_GAIN, bounds=(54.5, 36.0)):
+ROLE_TAU_S = 8.0             # ghosts settle into their role in the team shape with this time constant
+ROLE_WINDOW_S = 120.0        # role = mean position in the team frame over sightings within +-this window
+
+
+def team_flow(pos, det, tracked, sides, gain=FLOW_GAIN, bounds=(54.5, 36.0), fps=12.5, role_tau_s=ROLE_TAU_S,
+              role_window_s=ROLE_WINDOW_S):
     """Off-camera estimates that move with the team instead of standing still (in place, persist packs).
 
     The team's shift D(t) is the running sum of the median frame-to-frame step of its players seen in both
     frames; a median over whoever is in view, so it does not jump when the camera shows a different subset.
     An estimate after the last sighting a is pos[a] + gain * (D(t) - D(a)); before the next sighting b it is
-    pos[b] - gain * (D(b) - D(t)); between two sightings the two are blended by time. Kept on the pitch
-    (+2 m). Only estimate frames (det 0 and not tracked) change; detections never move.
+    pos[b] - gain * (D(b) - D(t)); between two sightings the two are blended by time. The longer a player is
+    unseen, the more the estimate settles into the player's role: D(t) + their mean position in the team frame
+    (pos - D) over sightings within +-role_window_s, weighted by 1 - exp(-age / role_tau_s), age = seconds to
+    the nearest sighting (role_tau_s 0 = off). Kept on the pitch (+2 m). Only estimate frames (det 0 and not
+    tracked) change; detections never move.
     """
     n, nP = det.shape
     g = np.asarray(gain, float)
@@ -594,6 +620,9 @@ def team_flow(pos, det, tracked, sides, gain=FLOW_GAIN, bounds=(54.5, 36.0)):
             if not len(est):
                 continue
             j = np.searchsorted(seen, est)
+            rel = pos[seen, c] - D[seen]                          # position in the team frame at each sighting
+            crel = np.vstack([np.zeros((1, 2)), np.cumsum(np.nan_to_num(rel), axis=0)])
+            W = int(round(role_window_s * fps))
             for k, jj in zip(est, j):
                 a = seen[jj - 1] if jj > 0 else None
                 b = seen[jj] if jj < len(seen) else None
@@ -604,6 +633,13 @@ def team_flow(pos, det, tracked, sides, gain=FLOW_GAIN, bounds=(54.5, 36.0)):
                     p = fa * (1 - w) + fb * w
                 else:
                     p = fa if fa is not None else fb
+                if role_tau_s:
+                    lo, hi = np.searchsorted(seen, k - W), np.searchsorted(seen, k + W)
+                    if hi > lo:
+                        role = D[k] + (crel[hi] - crel[lo]) / (hi - lo)
+                        age = min(abs(k - a) if a is not None else 1e9, abs(b - k) if b is not None else 1e9) / fps
+                        w = 1.0 - math.exp(-age / role_tau_s)
+                        p = p * (1 - w) + role * w
                 pos[k, c] = (np.clip(p[0], -bounds[0], bounds[0]), np.clip(p[1], -bounds[1], bounds[1]))
 
 
@@ -661,7 +697,7 @@ def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None, persist=
                 det[k, c] = 0
     if persist:
         sides = [g[0] for g in groups]
-        team_flow(pos, det, tracked, sides)
+        team_flow(pos, det, tracked, sides, fps=1.0 / (step / vfps), role_tau_s=0)
         hidden = hide_duplicates(pos, det, tracked, sides)
         if link_rep is not None:
             link_rep["hidden_duplicate_samples"] = hidden

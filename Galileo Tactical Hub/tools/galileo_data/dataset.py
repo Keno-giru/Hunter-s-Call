@@ -119,6 +119,9 @@ def build_catalog(root, hub_rel="../index.html"):
                               "linked": True})
         man["dir"] = md.parent.relative_to(root).as_posix()
         for c in clips:                                       # a frame for the hub's match picker cards
+            f = root / c["dir"] / c["file"]
+            if f.exists():
+                c["bytes"] = f.stat().st_size                 # identifies a hand-picked copy or link of this video
             th = _thumb(root / c["dir"], c["file"])
             if th:
                 c["thumb"] = th
@@ -133,8 +136,10 @@ def build_catalog(root, hub_rel="../index.html"):
     loose = []
     for cj in sorted((root / "footage").glob("*/clip.json")) if (root / "footage").is_dir() else []:
         sc = json.loads(cj.read_text(encoding="utf-8"))
+        vf = cj.parent / sc["clip"]["file"]
         loose.append({"id": sc["clip"]["id"], "dir": cj.parent.relative_to(root).as_posix(), "file": sc["clip"]["file"],
-                      "duration_s": sc["clip"]["duration_s"], "keys": len(sc["calibration"]["keys"])})
+                      "duration_s": sc["clip"]["duration_s"], "keys": len(sc["calibration"]["keys"]),
+                      "bytes": vf.stat().st_size if vf.exists() else None})
     training = {}
     for kind in ("detection", "keypoints", "clips"):
         d = root / "training" / kind

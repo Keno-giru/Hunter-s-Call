@@ -96,9 +96,27 @@ def infer_units(pos, players, period):
     return players
 
 
+_CLUB_TOKENS = {"FC", "F.C.", "SV", "SC", "VFL", "VFB", "TSG", "SSV", "AFC", "CF", "AC", "AS", "SSC", "RB", "BSC", "SPVGG",
+                "FSV", "TSV", "SG", "KV", "KRC", "RC", "CD", "UD", "SD", "CA", "FK", "NK", "SK", "IF", "BK", "HSV", "1848", "04", "05"}
+
+
+def short_name(name):
+    """Three-letter tag from a club name, skipping numbers and club-form words: '1. FC Nürnberg' -> NÜR,
+    'Fortuna Düsseldorf' -> FOR, 'FC Bayern München' -> BAY, 'F.C. Hansa Rostock' -> HAN, 'FC St. Pauli' -> STP."""
+    words = [w for w in str(name or "").split() if w.strip(".")]
+    norm = lambda w: w.replace(".", "").upper()  # noqa: E731
+    keep = [w for w in words if not norm(w).isdigit() and norm(w) not in _CLUB_TOKENS]
+    if not keep:
+        keep = words or [str(name or "")]
+    base = keep[0].replace(".", "")
+    if len(base) < 3 and len(keep) > 1:                       # 'St. Pauli' -> STP
+        base += keep[1].replace(".", "")
+    return base[:3].upper()
+
+
 def team_meta(name, side, short=None, color=None):
     c = color or DEFAULT_COLORS[side]
-    return {"name": name or side.title(), "short": short or (name or side)[:3].upper(),
+    return {"name": name or side.title(), "short": short or short_name(name or side),
             "color": c[0], "number_color": c[1]}
 
 

@@ -8,6 +8,8 @@ Writes one Parquet file per table and run (appending; nothing is ever overwritte
   <out>/stats/      per segment and player (and team): counter, value, unit, provenance
   <out>/events/     possession spells
   <out>/heatmap/    seconds seen per 2 x 2 m cell, per player
+  <out>/movement_runs/  runs (tools/galileo_data/runs.py): kind, forward metres, in behind, shape, channel,
+                    marker pull, outcome served | decoy | unserved | turnover; movement proxies only
 
 Provenance rule (docs/DATA_CAPTURE.md): "seen" = detected, "estimated" = interpolated or held off camera.
 Physical counters use only seen frames and short gaps (<= 1.5 s, physically possible), never long estimates
@@ -33,7 +35,7 @@ SPEED_BANDS = [("walk", 0.0, 2.0), ("jog", 2.0, 4.0), ("run", 4.0, 5.5), ("high_
 SPRINT_M_S, SPRINT_MIN_S = 7.0, 1.0
 ACCEL_M_S2, ACCEL_MIN_S = 2.5, 0.5
 CELL_M = 2.0
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2          # 2: movement_runs table + run counters (derived:movement)
 JUMP_M_S = 12.0              # frame-to-frame faster than this is a tracking jump, not running
 TOP_SPEED_WINDOW_S = 1.0     # top speed = best sustained speed over this window
 
@@ -206,6 +208,16 @@ def capture(match_dir, out_dir, *, seg_min=5, hub=None):
             add(seg, None, team, "team_possession_s", s, "s", "derived")
             add(seg, None, team, "team_possession_share", s / tot if tot else np.nan, "ratio", "derived")
 
+    # runs (Hunter's Call, movement layer): one row per run, counters per player
+    from .runs import detect_runs, run_stats
+    mv = detect_runs(d, mask, v, fps)
+    movement = [{"run_id": run_id, "match_id": match_id, **{k: val for k, val in r.items() if k != "player"}} for r in mv]
+    team_of_id = {p["id"]: p["team"] for p in players}
+    for pid, st in run_stats(mv).items():
+        for k, val in st.items():
+            add("match", pid, team_of_id.get(pid), k, val, "m" if k.endswith("_m") else "ratio" if k.endswith("_rate") else "count",
+                "derived:movement")
+
     # possession spells (events)
     ev = [e for e in (d.get("events") or []) if e.get("type") == "player_possession"]
     fno = np.asarray(d["frame"])
@@ -247,7 +259,8 @@ def capture(match_dir, out_dir, *, seg_min=5, hub=None):
 
     out_dir.mkdir(parents=True, exist_ok=True)
     counts = {}
-    for name, cols in (("runs", run), ("frames", frames), ("stats", rows), ("events", events), ("heatmap", hm)):
+    for name, cols in (("runs", run), ("frames", frames), ("stats", rows), ("events", events), ("heatmap", hm),
+                       ("movement_runs", movement)):
         table = pa.Table.from_pylist(cols) if isinstance(cols, list) else pa.table(cols)
         if table.num_rows == 0:
             counts[name] = 0

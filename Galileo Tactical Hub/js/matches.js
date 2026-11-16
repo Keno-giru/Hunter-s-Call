@@ -216,5 +216,35 @@ export function init(ctx) {
     show("Match info", body);
   }
 
-  ctx.provide("matches", { openPicker, openInfo });
+  // ------------------------------------------------------------ which match owns a video
+  // A video belongs to the match whose catalog clip has the same served path, or (for a hand-picked file, whose
+  // path the browser hides) the same file size. -> { current, match, title, url, href } or null when unknown.
+  let catCache = null;
+  async function catalog() {
+    if (!catCache) {
+      try { const r = await fetch(CATALOG, { cache: "no-store" }); catCache = r.ok ? await r.json() : { matches: [] }; }
+      catch { catCache = { matches: [] }; }
+    }
+    return catCache;
+  }
+  async function resolveFootage({ size = null, url = null } = {}) {
+    const cat = await catalog();
+    const cur = (packPath() || "").replace(/^\.\//, "");
+    const path = url ? decodeURIComponent(new URL(url, document.baseURI).pathname).replace(/^\//, "") : null;
+    for (const m of cat.matches || []) {
+      for (const c of m.clips || []) {
+        const served = `datasets/${c.dir}/${c.file}`;
+        if ((path && path === served) || (size != null && c.bytes === size)) {
+          const pack = `datasets/${m.dir}/${m.files?.pack || "pack.ghp.json"}`;
+          const info = m.info || {};
+          const title = `${info.home?.name || m.teams?.home || "Home"} v ${info.away?.name || m.teams?.away || "Away"}`;
+          const q = new URLSearchParams({ pack, footage: served });
+          return { current: pack === cur, match: m.match_id, title, url: served, href: `index.html?${q.toString()}` };
+        }
+      }
+    }
+    return null;
+  }
+
+  ctx.provide("matches", { openPicker, openInfo, resolveFootage });
 }
