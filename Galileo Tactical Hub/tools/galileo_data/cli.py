@@ -406,6 +406,21 @@ def cmd_track(a):
     say(f"open: http://localhost:8000/index.html?pack={Path(a.root).name}/matches/{mid}/pack.ghp.json&footage={rel}/{sc['clip']['file']}")
 
 
+def cmd_options(a):
+    from . import options as O
+    dirs = [Path(m) if (Path(m) / "pack.ghp.json").exists() else Path(a.root) / "matches" / m for m in a.match]
+    O.run(dirs, say=say)
+
+
+def cmd_jersey_train(a):
+    from . import jersey_train as JT
+    gsr = Path(a.root) / "sources" / "soccernet-gsr"
+    tr = sorted(p.name for p in (gsr / "train").glob("SNGS-*")) if (gsr / "train").is_dir() else []
+    va = sorted(p.name for p in (gsr / "valid").glob("SNGS-*")) if (gsr / "valid").is_dir() else []
+    JT.train(Path(a.root) / "sources" / "soccernet-jersey" / "train.zip", HUB / "models", epochs=a.epochs, frames=a.frames,
+             say=say, gsr_root=gsr, gsr_train=tr, gsr_valid=va)          # never the exam (test) split
+
+
 def cmd_footage_library(a):
     from . import library as L
     out = Path(a.out) if a.out else HUB.parents[1] / "Footage"
@@ -650,6 +665,15 @@ def main(argv=None):
                    help="persistent players: link fragments into <= 11 per team, keep them on the pitch off camera "
                         "(estimated, det 0); default match id video-<clip>-persist")
     s.set_defaults(fn=cmd_track)
+
+    s = sub.add_parser("options", help="chess-style option engine: top options per decision + grade of the choice")
+    s.add_argument("match", nargs="+", help="match folders or ids (xT is learned from all of them)")
+    s.set_defaults(fn=cmd_options)
+
+    s = sub.add_parser("jersey-train", help="train the shirt-number reader on SoccerNet SN-Jersey-2023 (GPU)")
+    s.add_argument("--epochs", type=int, default=12)
+    s.add_argument("--frames", type=int, default=24, help="random frames per tracklet per epoch")
+    s.set_defaults(fn=cmd_jersey_train)
 
     s = sub.add_parser("footage-library", help="one folder with every video (hard links / junctions, no copies)")
     s.add_argument("--out", help="folder (default: Footage next to the repo clone)")

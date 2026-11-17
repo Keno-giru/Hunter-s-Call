@@ -186,3 +186,27 @@ Dated, scoped verdicts with numbers. Newest last.
   rendered from its tracking (labelled synthetic): match 20.0 s = video 23.0 s (3 s lead), linked; SNGS-196's video
   on it: banner, no overlay; hand-picked files: own -> server path with 290 keys, other -> switch offered/accepted.
   Team tags skip numbers and club words (1. FC Nuernberg -> NUE as NÜR, FC St. Pauli -> STP).
+- 2026-11-16, shirt numbers (Keno): number-anchored identities in link_identities (`jersey=`): one identity per
+  team + number seen on >= 2 fragments (at most the cap), same-number pieces overlapping in time -> the weaker is
+  demoted to unread, unread pieces fitted into anchors by the link cost, leftovers chained. Bench, full 30 min,
+  simulated reads: none purity 0.39 / duplicates 17% / ghost 13.6 m; 30% read 95% right 0.64 / 11% / 6.4 m;
+  50%/90% 0.71 / 5.8% / 4.9 m; 70%/95% 0.81 / 1.2% / 3.8 m. (A first version with hard blocks on every read
+  made duplicates worse: every misread became a wall.) Off unless numbers are supplied.
+- 2026-11-16, jersey reader: off-the-shelf OCR fails on broadcast shirts (RapidOCR 0.2% reads; EasyOCR digits
+  3-7% precision on 1,909 labelled crops). Trained reader (tools/galileo_data/jersey_train.py, ResNet-18, readable
+  + tens + units heads) on SoccerNet SN-Jersey-2023 train (1.25 GB, HF, licence not stated). v1 (whole player):
+  88% on held-out tracklets but 0% on unseen GSR games: it learned kits, not digits (same games on both sides of
+  a tracklet split). v2 (shirt crop, colour augmentation, + GSR train clips, selected on GSR valid = unseen
+  games): precision 45-64% on unseen games depending on thresholds, 76-100% on exam games (possible overlap with
+  the jersey data's source videos: not counted). Not good enough for anchors (~90% needed): real reading is NOT
+  switched on. Next options: readable-or-not model on hand labels, scene-text-pretrained reader (PARSeq), pose
+  crops of the back. Weights in models/ (gitignored). PyTorch 2.11 cu128 + EasyOCR installed; EasyOCR pulled
+  OpenCV 5, re-pinned to 4.14 (opencv-python and -headless < 5).
+- 2026-11-16, option engine (tools/galileo_data/options.py, `galileo.py options`): per pass/shot the top 5 options
+  (pass to each team-mate, carry, shoot) valued as P(keep) x xT(target) - (1-P) x xT_opp - xT(ball); xT 16x12
+  learned from 7 IDSSE matches (shot goal chance from a public distance/angle xG). P(keep) = interception along
+  the path x pitch control at the target, Platt-calibrated on 2,712 passes (3 matches; failed passes end where the
+  next action starts); held-out 4 matches: AUC 0.82, predicted 0.818 vs completed 0.796. Grades scaled to
+  Bundesliga percentiles of loss (best top 25% ... blunder worst 3%); brilliant = best + >= 2 opponents bypassed
+  + >= 0.02 over the safest pass. Known weakness: crosses into a crowded box rated too likely to arrive (needs
+  per-type calibration). Grades are a model's opinion, unvalidated against coaches. tests/py/test_options.py 16/16.

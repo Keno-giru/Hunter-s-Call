@@ -290,9 +290,118 @@ def _team_shift(tracks):
     return shift
 
 
+def _jersey_fix(chains, pool, num_of, rep):
+    """Chains (lists of pool indices in time order) -> split where two confident shirt numbers disagree, then
+    merge chains that carry the same confident number and never overlap in time."""
+    out = []
+    for ch in chains:
+        cur, num = [], None
+        for i in ch:
+            n = num_of(pool[i].id)
+            if n is not None and num is not None and n != num:
+                out.append(cur)
+                rep["jersey_splits"] += 1
+                cur, num = [], None
+            cur.append(i)
+            num = n if n is not None else num
+        out.append(cur)
+    by_num = defaultdict(list)
+    rest = []
+    for ch in out:
+        nums = {num_of(pool[i].id) for i in ch} - {None}
+        (by_num[nums.pop()] if len(nums) == 1 else rest).append(ch) if nums else rest.append(ch)
+    merged = []
+    for n, chs in by_num.items():
+        groups = []
+        for ch in sorted(chs, key=lambda c: pool[c[0]].t[0]):
+            for g in groups:                                  # join a group if no fragment overlaps in time
+                if all(pool[a].t[-1] < pool[b].t[0] or pool[b].t[-1] < pool[a].t[0] for a in g for b in ch):
+                    g.extend(ch)
+                    rep["jersey_merges"] += 1
+                    break
+            else:
+                groups.append(list(ch))
+        merged += [sorted(g, key=lambda i: pool[i].t[0]) for g in groups]
+    return merged + rest
+
+
+def _anchor_identities(pool, num_of, cost, cap, max_cost, rep, min_support=2):
+    """Identities anchored on shirt numbers (pool = one team's keeper or outfield fragments, by start time).
+
+    1. One identity per confident number. Two fragments with the same number that overlap in time cannot both be
+       that player: the one with fewer detections is demoted to unread (a wrong read).
+    2. Unread fragments, longest first, join the identity where they fit best: no time overlap with its
+       fragments, cost = link cost from the fragment before + to the fragment after (in time), <= max_cost.
+    3. What fits nowhere is chained among itself by start order and plausibility (extra identities beyond the
+       anchors; the cap's worth with the most seen time persist).
+    -> (chains as lists of pool indices, number of chains over the cap)."""
+    def overlaps(i, ids):
+        a = pool[i]
+        return any(not (pool[j].t[-1] < a.t[0] or a.t[-1] < pool[j].t[0]) for j in ids)
+    # a real number shows on several fragments; a misread one usually on a single fragment. Anchor only numbers
+    # seen on >= min_support fragments, at most `cap` of them (most supported first); the rest count as unread.
+    support = defaultdict(int)
+    for i in range(len(pool)):
+        n = num_of(pool[i].id)
+        if n is not None:
+            support[n] += 1
+    good = sorted((n for n, k in support.items() if k >= min_support), key=lambda n: -support[n])[:cap]
+    rep["jersey_numbers_dropped"] = rep.get("jersey_numbers_dropped", 0) + len(support) - len(good)
+    slots = defaultdict(list)                                 # number -> fragment indices
+    unread = []
+    for i in sorted(range(len(pool)), key=lambda i: -len(pool[i].t)):
+        n = num_of(pool[i].id)
+        n = n if n in good else None
+        if n is None:
+            unread.append(i)
+        elif overlaps(i, slots[n]):
+            rep["jersey_demoted"] = rep.get("jersey_demoted", 0) + 1
+            unread.append(i)
+        else:
+            slots[n].append(i)
+    chains = [sorted(v, key=lambda i: pool[i].t[0]) for v in slots.values()]
+    left = []
+    for i in sorted(unread, key=lambda i: -len(pool[i].t)):
+        f = pool[i]
+        best, bc = None, math.inf
+        for ch in chains:
+            if overlaps(i, ch):
+                continue
+            before = [j for j in ch if pool[j].t[-1] < f.t[0]]
+            after = [j for j in ch if pool[j].t[0] > f.t[-1]]
+            c = 0.0
+            if before:
+                c += cost(pool[before[-1]], f)
+            if after:
+                c += cost(f, pool[after[0]])
+            if (before or after) and c < bc:
+                best, bc = ch, c
+        if best is not None and bc <= max_cost:
+            best.append(i)
+            best.sort(key=lambda j: pool[j].t[0])
+            rep["jersey_fitted"] = rep.get("jersey_fitted", 0) + 1
+        else:
+            left.append(i)
+    rest = []                                                 # leftovers: chain by start order when plausible
+    for i in sorted(left, key=lambda i: pool[i].t[0]):
+        f = pool[i]
+        cand = [(cost(pool[ch[-1]], f), ch) for ch in rest if pool[ch[-1]].t[-1] < f.t[0]]
+        cand = [x for x in cand if x[0] <= max_cost]
+        if cand:
+            min(cand, key=lambda x: x[0])[1].append(i)
+        else:
+            rest.append([i])
+    out = chains + rest
+    out.sort(key=lambda ch: -sum(pool[i].duration for i in ch))
+    rep["links"] += sum(len(ch) - 1 for ch in out)
+    rep["jersey_identities"] = rep.get("jersey_identities", 0) + len(chains)
+    return out, max(0, len(out) - cap)
+
+
 def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7.0, slack_m=3.0, colour_tol=28.0,
                     max_cost=2.0, min_seconds=1.0, split_m=0.0, vel_weight=0.5, vel_gap_s=1.0,
-                    flow_gap_s=1.0, flow_slack_m=4.0, flow_m_s=1.5, role_weight=0.0, role_scale_m=8.0, role_span_s=10.0):
+                    flow_gap_s=1.0, flow_slack_m=4.0, flow_m_s=1.5, role_weight=0.0, role_scale_m=8.0, role_span_s=10.0,
+                    jersey=None, jersey_conf=0.6, jersey_min_reads=2):
     # defaults chosen on eval/persist_bench.py (SoccerTrack, virtual camera; 2 x 5 min + 30 min, 2026-11-16):
     # team-shift links from 1 s with 1.5 m/s error growth; encounter cuts and role-in-link-cost off (both hurt)
     """Persistent players: chain each team's track fragments into at most 11 identities (1 keeper, 10 outfield).
@@ -336,6 +445,38 @@ def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7
         return np.mean([(x - sh(t)[0], y - sh(t)[1]) for x, y, t in pts], axis=0) if pts else None
     rend = {tr.id: role_of(tr, True) for tr in tracks} if role_weight else {}
     rstart = {tr.id: role_of(tr, False) for tr in tracks} if role_weight else {}
+
+    # shirt numbers: {track id: (number, confidence, reads)} from jersey.vote; only confident ones are used
+    def num_of(tid):
+        if not jersey:
+            return None
+        i = tid
+        while i not in jersey and i > 99:                     # encounter-cut pieces inherit their parent's number
+            i //= 100
+        v = jersey.get(i)
+        return v[0] if v and v[0] is not None and v[1] >= jersey_conf and v[2] >= jersey_min_reads else None
+    rep["jersey_tracks"] = sum(1 for tr in tracks if num_of(tr.id) is not None)
+
+    def link_cost(fa, fb, side):
+        """Cost of "fb continues fa" (fb starts after fa ends): distance to where fa should be by then, over reach."""
+        gap = (fb.t[0] - fa.t[-1]) / 1000.0
+        if vel_weight and gap <= vel_gap_s:                   # short gap: where it was heading, and how fast
+            px, py = fa.x[-1] + vend[fa.id][0] * gap, fa.y[-1] + vend[fa.id][1] * gap
+            c = math.hypot(fb.x[0] - px, fb.y[0] - py) / (slack_m + speed_m_s * gap)
+            c += vel_weight * float(np.hypot(*(vend[fa.id] - vstart[fb.id]))) / 4.0
+        elif flow_gap_s and gap > flow_gap_s:                 # long absence: where the team's shift says it should be
+            dx, dy = shift[side](fb.t[0]) - shift[side](fa.t[-1])
+            c = math.hypot(fb.x[0] - fa.x[-1] - dx, fb.y[0] - fa.y[-1] - dy) / (flow_slack_m + flow_m_s * gap)
+            ra, rb = rend.get(fa.id), rstart.get(fb.id)
+            if role_weight and ra is not None and rb is not None:
+                c += role_weight * float(np.hypot(*(ra - rb))) / role_scale_m
+        else:
+            c = math.hypot(fb.x[0] - fa.x[-1], fb.y[0] - fa.y[-1]) / (slack_m + speed_m_s * gap)
+        ca, cb = col[fa.id], col[fb.id]
+        if ca is not None and cb is not None and np.linalg.norm(ca - cb) > colour_tol:
+            c += 1.0
+        return c
+    rep["jersey_links"] = rep["jersey_blocked"] = rep["jersey_splits"] = rep["jersey_merges"] = 0
     BIG = 1e9
     for side in ("home", "away"):
         for gk in (True, False):
@@ -345,27 +486,24 @@ def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7
             rep["fragments"] += n
             if not n:
                 continue
+            if jersey and rep["jersey_tracks"]:
+                chains, extra = _anchor_identities(pool, num_of, lambda a, b: link_cost(a, b, side), cap, max_cost, rep)
+                rep["over_cap"] += extra
+                groups += [(side, "GK" if gk else None, [pool[i] for i in ch], k >= cap) for k, ch in enumerate(chains)]
+                continue
             C = np.full((n, n), BIG)
             for i, fa in enumerate(pool):
                 for j, fb in enumerate(pool):
                     if fb.t[0] < fa.t[-1] or i == j:
                         continue
-                    gap = (fb.t[0] - fa.t[-1]) / 1000.0
-                    if vel_weight and gap <= vel_gap_s:          # short gap: where it was heading, and how fast
-                        px, py = fa.x[-1] + vend[fa.id][0] * gap, fa.y[-1] + vend[fa.id][1] * gap
-                        c = math.hypot(fb.x[0] - px, fb.y[0] - py) / (slack_m + speed_m_s * gap)
-                        c += vel_weight * float(np.hypot(*(vend[fa.id] - vstart[fb.id]))) / 4.0
-                    elif flow_gap_s and gap > flow_gap_s:      # long absence: where the team's shift says it should be
-                        dx, dy = shift[side](fb.t[0]) - shift[side](fa.t[-1])
-                        c = math.hypot(fb.x[0] - fa.x[-1] - dx, fb.y[0] - fa.y[-1] - dy) / (flow_slack_m + flow_m_s * gap)
-                        ra, rb = rend.get(fa.id), rstart.get(fb.id)
-                        if role_weight and ra is not None and rb is not None:   # same role in the team shape?
-                            c += role_weight * float(np.hypot(*(ra - rb))) / role_scale_m
-                    else:
-                        c = math.hypot(fb.x[0] - fa.x[-1], fb.y[0] - fa.y[-1]) / (slack_m + speed_m_s * gap)
-                    ca, cb = col[fa.id], col[fb.id]
-                    if ca is not None and cb is not None and np.linalg.norm(ca - cb) > colour_tol:
-                        c += 1.0
+                    c = link_cost(fa, fb, side)
+                    na, nb = num_of(fa.id), num_of(fb.id)
+                    if na is not None and nb is not None:
+                        if na != nb:                              # two different shirt numbers: never one person
+                            rep["jersey_blocked"] += 1
+                            continue
+                        C[i, j] = min(c, 0.1)                     # same team, same number: the same player, however far
+                        continue
                     if c <= max_cost:
                         C[i, j] = c
             pen = 1.0
@@ -386,7 +524,11 @@ def link_identities(tracks, teams, *, outfield_cap=10, keeper_cap=1, speed_m_s=7
                 while ch[-1] in nxt:
                     ch.append(nxt[ch[-1]])
                 chains.append(ch)
+            if jersey:
+                chains = _jersey_fix(chains, pool, num_of, rep)
             rep["links"] += len(nxt)
+            rep["jersey_links"] += sum(1 for r, c in nxt.items() if num_of(pool[r].id) is not None
+                                       and num_of(pool[r].id) == num_of(pool[c].id))
             rep["forced"] += sum(1 for r, c in nxt.items() if C[r, c] > 1.0)
             rep["over_cap"] += max(0, len(chains) - cap)
             # the cap's worth of chains with the most seen time persist; any extra is shown only while seen
@@ -661,7 +803,7 @@ def to_pack(res, *, match_id, fps_out=None, min_seconds=1.0, meta=None, persist=
     teams = res["teams"]
     link_rep = None
     if persist:
-        groups, link_rep = link_identities(res["tracks"], teams, min_seconds=min_seconds)
+        groups, link_rep = link_identities(res["tracks"], teams, min_seconds=min_seconds, jersey=res.get("jersey"))
     else:
         keep = [tr for tr in res["tracks"] if teams.get(tr.id, ("other",))[0] in ("home", "away") and tr.duration >= min_seconds]
         keep.sort(key=lambda tr: (teams[tr.id][0] != "home", tr.t[0]))

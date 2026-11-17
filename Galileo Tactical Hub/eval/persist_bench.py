@@ -50,6 +50,21 @@ def virtual_camera(ball, fps, half_width, lag_s=1.5):
     return np.clip(cx, -52.5 + half_width, 52.5 - half_width)
 
 
+def simulate_jersey(tracks, truth, players, p_read, p_right, seed=0):
+    """Shirt-number reads per fragment: read with probability p_read; right with probability p_right, else a
+    wrong number. True number = the player's own (SoccerTrack id + 1, or the pack's number)."""
+    rng = np.random.default_rng(seed + 7)
+    out = {}
+    for tr in tracks:
+        if rng.random() >= p_read:
+            continue
+        p = players[truth[tr.id]]
+        true = int(p.get("number") or 0) or (truth[tr.id] % 11 + 1)
+        n = true if rng.random() < p_right else int(rng.choice([k for k in range(1, 40) if k != true]))
+        out[tr.id] = (n, 0.9, 3)
+    return out
+
+
 def film(d, half_width, seed, minutes=None, noise_m=0.3, occl_rate=0.02, occl_s=(0.3, 1.5)):
     """-> res for to_pack, and the truth: frag id -> person index; per frame camera centre."""
     rng = np.random.default_rng(seed)
@@ -93,7 +108,7 @@ def film(d, half_width, seed, minutes=None, noise_m=0.3, occl_rate=0.02, occl_s=
 
 
 def score(res, truth, pos_true, seen_true, n, persist=True):
-    groups, rep = V.link_identities(res["tracks"], res["teams"])
+    groups, rep = V.link_identities(res["tracks"], res["teams"], jersey=res.get("jersey"))
     pack, _, _ = V.to_pack(res, match_id="bench", persist=persist)
     d = decode(pack)
     assert d["n"] == n
@@ -155,12 +170,16 @@ def main():
     ap.add_argument("--half-width", type=float, default=20.0)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--json", help="write the result here")
+    ap.add_argument("--jersey", help="simulate shirt-number reads: p_read,p_right (e.g. 0.5,0.9)")
     a = ap.parse_args()
     names = [m for m in GROUND_TRUTH if (HUB / "datasets" / "matches" / m / "pack.ghp.json").exists()] if a.match == "all" else [a.match]
     out = []
     for m in names:
         d = decode(load(HUB / "datasets" / "matches" / m / "pack.ghp.json"))
         res, truth, pos, seen, n = film(d, a.half_width, a.seed, a.minutes)
+        if a.jersey:
+            pr, pc = (float(x) for x in a.jersey.split(","))
+            res["jersey"] = simulate_jersey(res["tracks"], truth, d["players"], pr, pc, a.seed)
         r = score(res, truth, pos, seen, n)
         r.update({"match": m, "half_width_m": a.half_width, "seed": a.seed, "minutes": round(n / float(d["fps"]) / 60, 1)})
         out.append(r)
