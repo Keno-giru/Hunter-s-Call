@@ -172,6 +172,42 @@ def set_params(ball_speed=None, sigma=None, vmax=None, react=None):
     REACT_S = react if react is not None else REACT_S
 
 
+def score_options(ball, sgn, xt, targets, target_ids, att_xy, att_v, def_xy, def_v):
+    """Every option at one on-ball moment, best first: pass to each target (team-mates, led by their velocity), carry
+    CARRY_M toward goal, shoot. ball (2,), sgn = attacking direction of the team on the ball (+1 / -1), att_* = the
+    team-mates (not the carrier), def_* = opponents. -> (options, pressure on the ball in m, score_target(tgt, kind)).
+    Shared by the match analysis (evaluate_match) and the sandbox (sandbox.py), so both use the same maths."""
+    ball = np.asarray(ball, float)
+    att_xy, att_v = np.asarray(att_xy, float).reshape(-1, 2), np.asarray(att_v, float).reshape(-1, 2)
+    def_xy, def_v = np.asarray(def_xy, float).reshape(-1, 2), np.asarray(def_v, float).reshape(-1, 2)
+    A = lambda xy: np.asarray(xy) * sgn                                # noqa: E731  attacking +x frame
+    xt_ball = xt_at(xt, *A(ball))
+
+    def score_target(tgt, kind, who=None):
+        tgt = np.asarray(tgt, float)
+        t_ball = float(np.hypot(*(tgt - ball))) / BALL_SPEED
+        p = control(tgt, t_ball, att_xy, att_v, def_xy, def_v) * (1.0 - p_intercept(ball, tgt, def_xy, def_v))
+        pc = min(max(p, 1e-3), 1 - 1e-3)
+        p = 1.0 / (1.0 + math.exp(-(CAL_A * math.log(pc / (1 - pc)) + CAL_B)))
+        v_keep = xt_at(xt, *A(tgt))
+        v_lose = xt_at(xt, *(-A(tgt)))                               # opponents attack the other way
+        val = p * v_keep - (1 - p) * v_lose - xt_ball
+        return {"kind": kind, "player": who, "x": round(float(tgt[0]), 1), "y": round(float(tgt[1]), 1),
+                "p_keep": round(p, 3), "value": round(val, 4), "bypassed": bypassed(ball, tgt, def_xy, sgn),
+                "forward_m": round(float((tgt[0] - ball[0]) * sgn), 1), "length_m": round(float(np.hypot(*(tgt - ball))), 1),
+                "open_m": round(float(np.hypot(*(def_xy - tgt).T).min()), 1) if len(def_xy) else 99.0}
+
+    opts = [score_target(t, "pass", who) for t, who in zip(np.asarray(targets, float).reshape(-1, 2), target_ids)]
+    opts.append(score_target(ball + np.array([CARRY_M * sgn, 0.0]), "carry"))
+    sx = xg(*A(ball))
+    opts.append({"kind": "shot", "player": None, "x": round(52.5 * sgn, 1), "y": 0.0, "p_keep": None,
+                 "value": round(sx - xt_ball, 4), "bypassed": 0, "forward_m": round(float(52.5 - ball[0] * sgn), 1),
+                 "length_m": round(float(np.hypot(52.5 * sgn - ball[0], ball[1])), 1), "xg": round(sx, 4)})
+    opts.sort(key=lambda o: -o["value"])
+    pressure = float(np.hypot(*(def_xy - ball).T).min()) if len(def_xy) else 99.0
+    return opts, pressure, score_target
+
+
 def evaluate_match(d, xt, dirs, fps):
     """-> list of decision dicts for every pass and shot event with a known frame."""
     pos, det, players = np.asarray(d["pos"], float), np.asarray(d["det"]), d["players"]
@@ -200,36 +236,9 @@ def evaluate_match(d, xt, dirs, fps):
         if not mates:
             continue
         ball = np.array([e["x"], e["y"]], float)
-        A = lambda xy: np.asarray(xy) * sgn                            # noqa: E731  attacking +x frame
-        att_xy, att_v = pos[k, mates] , vel[k, mates]
-        def_xy, def_v = pos[k, opp], vel[k, opp]
-        xt_ball = xt_at(xt, *A(ball))
-        opts = []
-
-        def score_target(tgt, kind, who=None):
-            t_ball = float(np.hypot(*(tgt - ball))) / BALL_SPEED
-            p = control(tgt, t_ball, att_xy, att_v, def_xy, def_v) * (1.0 - p_intercept(ball, tgt, def_xy, def_v))
-            pc = min(max(p, 1e-3), 1 - 1e-3)
-            p = 1.0 / (1.0 + math.exp(-(CAL_A * math.log(pc / (1 - pc)) + CAL_B)))
-            v_keep = xt_at(xt, *A(tgt))
-            v_lose = xt_at(xt, *(-A(tgt)))                           # opponents attack the other way
-            val = p * v_keep - (1 - p) * v_lose - xt_ball
-            return {"kind": kind, "player": who, "x": round(float(tgt[0]), 1), "y": round(float(tgt[1]), 1),
-                    "p_keep": round(p, 3), "value": round(val, 4), "bypassed": bypassed(ball, tgt, def_xy, sgn),
-                    "forward_m": round(float((tgt[0] - ball[0]) * sgn), 1), "length_m": round(float(np.hypot(*(tgt - ball))), 1),
-                    "open_m": round(float(np.hypot(*(def_xy - tgt).T).min()), 1) if len(def_xy) else 99.0}
-        for c in mates:
-            tgt = pos[k, c] + vel[k, c] * LEAD_S
-            opts.append(score_target(tgt, "pass", players[c]["id"]))
-        carry = ball + np.array([CARRY_M * sgn, 0.0])
-        opts.append(score_target(carry, "carry"))
-        sx = xg(*A(ball))
-        opts.append({"kind": "shot", "player": None, "x": round(52.5 * sgn, 1), "y": 0.0, "p_keep": None,
-                     "value": round(sx - xt_ball, 4), "bypassed": 0, "forward_m": round(float(52.5 - ball[0] * sgn), 1),
-                     "length_m": round(float(np.hypot(52.5 * sgn - ball[0], ball[1])), 1), "xg": round(sx, 4)})
-        opts.sort(key=lambda o: -o["value"])
-        # context for the choice model: pressure on the ball carrier, and which listed option was taken
-        pressure = float(np.hypot(*(def_xy - ball).T).min()) if len(def_xy) else 99.0
+        opts, pressure, score_target = score_options(ball, sgn, xt, pos[k, mates] + vel[k, mates] * LEAD_S,
+                                                     [players[c]["id"] for c in mates], pos[k, mates], vel[k, mates],
+                                                     pos[k, opp], vel[k, opp])
         chosen_idx = None
         if e["type"] == "shot":
             chosen_idx = next(i for i, o in enumerate(opts) if o["kind"] == "shot")

@@ -2,7 +2,7 @@
 // own menu, and a right-button drag (the 3D camera pans with it) never opens the menu.
 //
 // On a player (hovered on the 3D pitch, 2D board or video, or a roster row): select, add/remove, join as
-// line, select their team's back line / midfield / attack.
+// line, select their team's back line / midfield / attack, sandbox (freeze here with this player on the ball).
 // Anywhere else: view, team units, drawing tools and colour, board tools, footage display and sync,
 // clip in/out, clear selection, help.
 
@@ -26,7 +26,7 @@ export function init(ctx) {
   const { store, mounts } = ctx;
   const root = mounts.root || document.getElementById("hub");
   const svc = {};
-  for (const name of ["shell", "drawing", "board2d", "footage", "timeline"]) ctx.need(name).then((s) => { svc[name] = s; }, () => {});
+  for (const name of ["shell", "drawing", "board2d", "footage", "timeline", "sandbox"]) ctx.need(name).then((s) => { svc[name] = s; }, () => {});
 
   let menus = [], downAt = null, returnFocus = null;
 
@@ -165,6 +165,8 @@ export function init(ctx) {
       { label: "Select only this player", run: () => store.set("selection", [i]) },
       { label: on ? "Remove from selection" : "Add to selection", key: "Shift+click", run: () => sh?.selectPlayer?.(i, true) },
       { label: "Join selection as line", disabled: (on ? sel().length : sel().length + 1) < 2, run: () => { if (!on) store.set("selection", [...sel(), i]); return sh?.joinSelection?.(); } },
+      { label: svc.sandbox?.on ? "Sandbox: give this player the ball" : "Sandbox: freeze here, this player on the ball", disabled: !svc.sandbox || d < 0,
+        run: () => svc.sandbox.giveBall(i) },
       { sep: true },
       ...unitItems(p.team),
     ];

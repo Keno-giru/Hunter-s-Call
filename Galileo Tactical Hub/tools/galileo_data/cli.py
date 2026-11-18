@@ -412,6 +412,23 @@ def cmd_space(a):
     SP.run(dirs, a.root, say=say, force=a.force)
 
 
+def cmd_archetypes(a):
+    import json
+    from . import archetypes as AR
+    raw, lib_path = HUB / "datasets" / "raw" / "statsbomb", HUB / "datasets" / "archetypes" / "library.json"
+    if a.action == "fetch":
+        AR.fetch(raw, per=a.per, min_minutes=a.min_minutes, say=say)
+    elif a.action == "build":
+        AR.build(raw, lib_path, say=say)
+    else:
+        lib = json.loads(lib_path.read_text(encoding="utf-8"))
+        name = next((r for r in lib["references"] if r.lower() == (a.name or "").lower()), None)
+        if not name:
+            return say("references: " + ", ".join(lib["references"]))
+        for ref, sim, drive, thin in AR.like(lib, lib["references"][name]["features"], top=5, exclude=name):
+            say(f"{ref:18s} {sim:.2f}{' (thin)' if thin else ''}  shared: {', '.join(drive)}")
+
+
 def cmd_choice(a):
     from . import choice as CH
     res = lambda ms: [Path(m) if (Path(m) / "decisions.json").exists() else Path(a.root) / "matches" / m for m in ms]  # noqa: E731
@@ -687,6 +704,13 @@ def main(argv=None):
     s.add_argument("match", nargs="+", help="match folders or ids (the threat grid is learned from all of them)")
     s.add_argument("--force", action="store_true")
     s.set_defaults(fn=cmd_space)
+
+    s = sub.add_parser("archetypes", help="reference-player fingerprints (StatsBomb open data, research use only)")
+    s.add_argument("action", choices=["fetch", "build", "like"])
+    s.add_argument("name", nargs="?", help="like: a reference player, e.g. Xavi")
+    s.add_argument("--per", type=int, default=6, help="fetch: matches per reference")
+    s.add_argument("--min-minutes", type=float, default=60.0)
+    s.set_defaults(fn=cmd_archetypes)
 
     s = sub.add_parser("choice", help="model 1: which option each player tends to choose (fit on decisions.json)")
     s.add_argument("match", nargs="+", help="training matches (folders or ids with decisions.json)")

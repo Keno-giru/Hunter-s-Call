@@ -33,7 +33,7 @@ const ctx = createApp({ mounts: { root: $("hub"), top: $("hub-top"), left: $("hu
   stage3d: $("stage3d"), stage2d: $("stage2d"), video: $("stage-video"), hud: $("stage-hud"), toolbar: $("hub-toolbar"),
   right: $("hub-right"), bottom: $("hub-bottom"), modal: $("hub-modal") } });
 window.__hub = ctx;                                    // test hook (Playwright)
-const MODULES = ["shell", "pitch3d", "entities3d", "board2d", "timeline", "units", "analytics", "drawing", "footage", "contextmenu", "matches"];
+const MODULES = ["shell", "pitch3d", "entities3d", "board2d", "timeline", "units", "analytics", "drawing", "footage", "contextmenu", "matches", "sandbox"];
 window.__hubModules = {};
 for (const m of MODULES) {
   try { const mod = await import(`./js/${m}.js`); await mod.init?.(ctx); window.__hubModules[m] = "ok"; }

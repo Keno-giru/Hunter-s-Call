@@ -251,3 +251,56 @@ Dated, scoped verdicts with numbers. Newest last.
   third). Runs into empty space: 42-56% of attacking runs per team across 9 matches. A silent failure (pandas
   missing, swallowed by try/except) left that stat empty at first; fixed, errors no longer hidden.
   tests/py/test_space.py 6/6.
+- 2026-11-18, sandbox view (js/sandbox.js, tools/galileo_data/sandbox.py, POST /api/sandbox in tools/serve.py):
+  freeze any frame (panel "Sandbox", command `sandbox`, or right-click a player -> give them the ball). For the
+  player on the ball: every pass / carry / shot scored by the option engine (value, P(keep), the grade the choice
+  would get), the chance THIS player picks each option (model 1, own style when the model saw them, else the
+  average), team control (model 2) and empty space ahead of the ball (model 3) drawn on the pitch; arrows sized by
+  pick chance, coloured by grade. Positions sit in board.overrides, so dragging players re-reads the moment at
+  once (~2 ms per read once loaded). Play an option (or "most likely" / "best") to step on, Back to undo. The step
+  is plain kinematics (ball at 20 m/s, everyone keeps their velocity, the receiver arrives at the target): players
+  do not react yet; reactive AI players are the next piece. The option scoring moved into options.score_options,
+  shared by the match analysis and the sandbox (output identical to before on 2 IDSSE matches, checked).
+  tests/py/test_sandbox.py 13/13; T0 PASS 11/11.
+- 2026-11-18, player archetypes pilot (tools/galileo_data/archetypes.py, `galileo.py archetypes fetch|build|like`):
+  describe players as the reference players they play like instead of labels like "passer". Source check first:
+  Flashscore's terms (2.2 personal use only, 2.9 database extraction, 2.10 no scraping without consent) rule it out,
+  and it carries results/line-ups, not the event data a style needs. StatsBomb open data does carry it: 2,651 men's
+  matches; deep coverage for Messi 602, Busquets 408, Pique 340, Iniesta 338, Xavi 263, Dani Alves 235, Suarez 195,
+  Neymar 156, Griezmann 142, Henry 102; usable for Yaya Toure 92, Ramos 94, Mbappe 86, Ronaldo 76, Modric 71,
+  Thiago 65, Ronaldinho 59, Kroos 58, Kante 56, Benzema 56, Bale 42, De Bruyne 42, Salah 40; thin for Xabi Alonso 14,
+  Lewandowski 15, Pirlo 3 (marked thin). Its user agreement: research only, no commercial use of the data or derived
+  analysis, no redistribution, StatsBomb logo on publications -> raw data and library stay local (datasets/,
+  gitignored). Pilot: 6 matches per reference (102 matches, 308 MB), 24-feature fingerprint (per-90 volumes + style
+  shares: pass length mix, backward share under pressure, progressive / through / switch passes, carries, dribbles,
+  shots + xG, action depth and width, pressures, tackles + interceptions, recoveries, aerials), cosine on z-scores.
+  Nearest neighbours read like football (Xavi -> Modric, Kroos, Thiago; Messi -> Neymar; Henry -> Mbappe;
+  Suarez -> Salah, Benzema; Pique -> Ramos; Kante -> Busquets; Xabi Alonso -> Vieira). Self-recognition from 3
+  matches vs 3 others: top-1 13/27, top-3 17/27 (chance 1/27): the fingerprint carries the player but needs more
+  matches. Known bias: mostly Barcelona data, team style leaks in (Busquets -> Puyol). Next: all matches per
+  reference, role + team-context adjustment, the same fingerprint for Galileo's own players (IDSSE, CC BY 4.0, and
+  later footage) so each gets "plays like X (0.86), Y (0.81)" with the features that drive it.
+  tests/py/test_archetypes.py 6/6.
+- 2026-11-18, sandbox fixes: (1) boundary - repeated steps drifted players off the pitch (everyone kept running
+  at full speed every step, receivers were placed at unclamped targets, limit was 5 m past the lines). Now ball
+  targets stay 0.5 m inside the lines, players at most 1 m outside, runs slow with a 3 s time constant, a velocity
+  pointing out is dropped at the line, the receiver stops on arrival; new velocities go back to the hub.
+  Test: 60 random steps with everyone sprinting at the lines stay in bounds. (2) 3D - the sandbox no longer forces
+  the 2D view; each step plays out like the replay (players run with gait and facing, ball flies, lofted above
+  25 m), input is locked until it lands (161 rapid clicks -> 16 clean steps), run lines show where each player is
+  heading in the next 2 s. tests/py/test_sandbox.py 14/14; T0 PASS 11/11.
+- 2026-11-18, sandbox referee checkpoint + input fixes (tools/galileo_data/rules.py): every option is checked
+  before it is played. Offside (Law 11: opponent half, ahead of the ball and of the second-last opponent, keeper
+  counts; body centres from tracking, under 0.5 m marked tight; exempt straight after a throw-in, corner or goal
+  kick) -> graded "offside", valued as possession lost, drawn dashed with the margin, and the offside line drawn;
+  playing it gives an indirect free kick to the defenders where the receiver stood. Position check: > 11 players,
+  players > 1 m outside, ball out of play. Calls the user makes (fouls are not visible in positions): foul on /
+  by the carrier (free kick; penalty when the defenders foul in their own box), drop ball, red card (selected
+  player leaves), any restart by hand; after a shot: goal -> kick-off, missed -> goal kick, saved -> corner.
+  Restarts are set up by the Laws (9.15 m at free kicks / corners / kick-off, area + arc clear and keeper on the
+  line at a penalty, opponents out of the area at a goal kick, 2 m at a throw-in, 4 m at a drop ball; free-kick
+  spots kept on the pitch). Real data: Tempelmann -> Wintzheimer (18.4 m beyond the line) called offside, IFK to
+  FOR. Input fixes for "auto-playing": the timeline cannot play while the sandbox is on (scrubbing re-freezes at
+  the new moment), re-reads started during a step are dropped, drags during a step are ignored, option rows take
+  Enter only (Space stays the hub's play key), the ball follows a taker dragged off the restart spot.
+  tests/py/test_rules.py 24/24, test_sandbox.py 14/14; T0 PASS 11/11.

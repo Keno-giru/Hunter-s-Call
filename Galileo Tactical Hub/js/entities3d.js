@@ -228,7 +228,8 @@ function setup(ctx, s3) {
     const cam = s3.camera, cp = cam.position;
     const showNames = !!store.get("overlays")?.names;
     const board = !!store.get("board.enabled"), ov = board ? store.get("board.overrides") : null;
-    const dData = Math.min(0.5, Math.abs(st.frameF - lastFrameF) / (replay.fps || 10));   // data-time step: pose holds when paused
+    // data-time step: pose holds when paused; st.simDt = match seconds of a sandbox step playing out (timeline paused)
+    const dData = st.simDt > 0 ? Math.min(0.5, st.simDt) : Math.min(0.5, Math.abs(st.frameF - lastFrameF) / (replay.fps || 10));
     lastFrameF = st.frameF;
     const kYaw = 1 - Math.exp(-dt * 9);
     const ortho = !!cam.isOrthographicCamera;

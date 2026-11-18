@@ -12,6 +12,7 @@ import json
 import mimetypes
 import os
 import re
+import sys
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -76,9 +77,12 @@ class Handler(SimpleHTTPRequestHandler):
         self._remaining = b - a + 1
         return f
 
-    # ---- the one write endpoint: match info next to a match's pack (local only, small, validated)
+    # ---- local endpoints: match info (the one write), sandbox (read-only computation)
     def do_POST(self):
-        if self.path.split("?")[0] != "/api/match-info":
+        route = self.path.split("?")[0]
+        if route == "/api/sandbox":
+            return self._sandbox()
+        if route != "/api/match-info":
             return self.send_error(404)
         try:
             n = int(self.headers.get("Content-Length") or 0)
@@ -100,6 +104,42 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"ok": True, "file": out.relative_to(root).as_posix()})
         except (ValueError, UnicodeDecodeError) as e:
             return self._json(400, {"error": f"bad JSON: {e}"})
+
+    def _sandbox(self):
+        """POST {state, option?} -> {state, analysis}. option given: play it first (step), then analyse the new moment.
+        Computes only; writes nothing. Needs numpy (run the server with the project's Python)."""
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= 512 * 1024:
+                return self._json(413, {"error": "body must be 1 byte to 512 KB"})
+            body = json.loads(self.rfile.read(n).decode("utf-8"))
+            state = body.get("state")
+            if not isinstance(state, dict) or not isinstance(state.get("players"), list) or len(state["players"]) > 60:
+                return self._json(400, {"error": "need {state: {players: [...] (max 60), carrier: index}}"})
+            pack = state.get("pack")
+            root = Path(self.directory).resolve()
+            if pack is not None:
+                tgt = (root / str(pack)).resolve()
+                if not isinstance(pack, str) or (root / "datasets") not in tgt.parents or not tgt.is_file():
+                    state["pack"] = None
+            try:
+                sys.path.insert(0, str(Path(__file__).resolve().parent))
+                from galileo_data import sandbox as SB
+            except ImportError as e:
+                return self._json(503, {"error": f"sandbox needs numpy in the server's Python ({e})"})
+            opt, c = body.get("option"), body.get("call")
+            ended = None
+            if isinstance(opt, dict):
+                state = SB.step(state, opt, root)
+                ended = state.pop("ended", None)
+            elif isinstance(c, dict):
+                state = SB.call(state, c, root)
+            analysis = None if ended else SB.analyse(state, root)
+            return self._json(200, {"state": state, "analysis": analysis, "ended": ended})
+        except (ValueError, KeyError, TypeError, UnicodeDecodeError) as e:
+            return self._json(400, {"error": f"{type(e).__name__}: {e}"})
+        except RuntimeError as e:
+            return self._json(409, {"error": str(e)})
 
     def _json(self, code, obj):
         data = json.dumps(obj).encode("utf-8")

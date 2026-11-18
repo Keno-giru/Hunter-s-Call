@@ -1,4 +1,4 @@
-PASS  all hub modules load                                    {"shell": "ok", "pitch3d": "ok", "entities3d": "ok", "board2d": "ok", "timeline": "ok", "units": "ok", "analytics": "ok", "drawing": "ok", "footage": "ok", "contextmenu": "ok", "matches": "ok"}
+PASS  all hub modules load                                    {"shell": "ok", "pitch3d": "ok", "entities3d": "ok", "board2d": "ok", "timeline": "ok", "units": "ok", "analytics": "ok", "drawing": "ok", "footage": "ok", "contextmenu": "ok", "matches": "ok", "sandbox": "ok"}
 PASS  keys are stamped at the presented frames                [400, 1600, 2800, 3600]
 PASS  H(t) on a key at 0.42 s (key)                           mode=key err=0.42px (max 1.5)
 PASS  H(t) before the first key at 0.10 s (extrapolate)       mode=extrapolate err=0.66px (max 4)
