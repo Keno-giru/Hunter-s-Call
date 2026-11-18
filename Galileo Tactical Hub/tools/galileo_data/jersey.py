@@ -21,6 +21,10 @@ MIN_SCORE = 0.80          # per-crop OCR confidence floor
 MIN_BOX_H = 40            # px at the crop's resolution: smaller players carry no readable digits
 TORSO = (0.15, 0.85, 0.12, 0.55)   # x0, x1, y0, y1 as fractions of the box: the shirt, not shorts or head
 TARGET_H = 64             # crops are scaled to this height before reading
+# trained-reader decision rule (chosen on SoccerNet-GSR valid = unseen games, 2026-11-18: 84% precision at ~26%
+# coverage of labelled players; the exam split only reported): readable >= 0.9 per frame, unique numbers per team,
+# the number must hold >= 0.3 of a track's score mass with >= 5 frames' worth of readable evidence
+READ_MIN, SHARE_MIN, WEIGHT_MIN = 0.9, 0.3, 5.0
 
 
 class Reader:
@@ -144,6 +148,43 @@ def player_crop(img_bgr, box):
     if y2 - y1 < MIN_BOX_H or x2 - x1 < 8:
         return None
     return img_bgr[y1:y2, x1:x2, ::-1].copy()
+
+
+def number_scores(R, TE, UN, min_readable=READ_MIN):
+    """Per-frame softmaxes -> scores over numbers 1..99 (index = number) and the total readable weight.
+    Each readable frame adds readable-prob x P(tens) x P(units) for every number (full distribution, not argmax)."""
+    R, TE, UN = np.asarray(R), np.asarray(TE), np.asarray(UN)
+    out = np.zeros(100)
+    if not len(R):
+        return out, 0.0
+    w = np.where(R[:, 1] >= min_readable, R[:, 1], 0.0)
+    if not w.any():
+        return out, 0.0
+    joint = np.einsum("k,kt,ku->tu", w, TE, UN)               # (11 tens incl. 'none' at 10) x (10 units)
+    for t in range(11):
+        for u in range(10):
+            n = u if t == 10 else t * 10 + u
+            if 1 <= n <= 99:
+                out[n] += joint[t, u]
+    return out, float(w.sum())
+
+
+def assign_team_numbers(scores, min_share=SHARE_MIN, min_weight=WEIGHT_MIN):
+    """{track: (scores[100], weight)} of ONE team -> {track: (number, share)}: each number goes to at most one
+    track (Hungarian on the scores), and only when it holds >= min_share of that track's score mass and the track
+    has >= min_weight readable evidence. Kills 'the whole team is #24'."""
+    from scipy.optimize import linear_sum_assignment
+    tids = [t for t, (sc, w) in scores.items() if w >= min_weight and sc.sum() > 0]
+    if not tids:
+        return {}
+    M = np.stack([scores[t][0] / scores[t][0].sum() for t in tids])   # rows: share of each number per track
+    r, c = linear_sum_assignment(-M[:, 1:])
+    out = {}
+    for i, j in zip(r, c):
+        n, share = j + 1, float(M[i, j + 1])
+        if share >= min_share:
+            out[tids[i]] = (n, share)
+    return out
 
 
 def vote(reads):

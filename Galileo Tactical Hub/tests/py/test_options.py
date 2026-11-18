@@ -107,6 +107,27 @@ def test_anchors():
     check("a lone misread number does not create an identity", ids == [(1, 3, 5), (2, 4, 6)], f"{ids} {rep}")
 
 
+def test_choice_model():
+    """A player who always picks the forward option should get a model that predicts it."""
+    import tempfile, json as _json
+    from galileo_data import choice as CH
+    rng = np.random.default_rng(0)
+    with tempfile.TemporaryDirectory() as tmp:
+        m = Path(tmp) / "m1"; m.mkdir()
+        decs = []
+        for i in range(120):
+            opts = [{"kind": "pass", "player": f"r{j}", "x": float(j), "y": 0.0, "p_keep": 0.8, "value": 0.0, "bypassed": 0,
+                     "forward_m": fwd, "length_m": 15.0, "open_m": 5.0} for j, fwd in enumerate((-12.0, 0.0, 15.0))]
+            rng.shuffle(opts)
+            ci = next(k for k, o in enumerate(opts) if o["forward_m"] > 10)          # always forward
+            decs.append({"player": "p1", "team": "home", "all_options": opts, "chosen_option": ci, "pressure_m": 2.0})
+        (m / "decisions.json").write_text(_json.dumps({"decisions": decs}))
+        data = CH.load_training([m])
+        model = CH.fit(data, epochs=150)
+        ev = CH.evaluate(model, data)
+        check("choice model learns a consistent player's preference", ev["top1"] > 0.9, str(ev))
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

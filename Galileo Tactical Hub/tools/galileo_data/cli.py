@@ -406,6 +406,18 @@ def cmd_track(a):
     say(f"open: http://localhost:8000/index.html?pack={Path(a.root).name}/matches/{mid}/pack.ghp.json&footage={rel}/{sc['clip']['file']}")
 
 
+def cmd_space(a):
+    from . import space as SP
+    dirs = [Path(m) if (Path(m) / "pack.ghp.json").exists() else Path(a.root) / "matches" / m for m in a.match]
+    SP.run(dirs, a.root, say=say, force=a.force)
+
+
+def cmd_choice(a):
+    from . import choice as CH
+    res = lambda ms: [Path(m) if (Path(m) / "decisions.json").exists() else Path(a.root) / "matches" / m for m in ms]  # noqa: E731
+    CH.run(res(a.match), res(a.test or []), out=a.out or (HUB / "models" / "choice_model.json"), say=say)
+
+
 def cmd_options(a):
     from . import options as O
     dirs = [Path(m) if (Path(m) / "pack.ghp.json").exists() else Path(a.root) / "matches" / m for m in a.match]
@@ -417,7 +429,9 @@ def cmd_jersey_train(a):
     gsr = Path(a.root) / "sources" / "soccernet-gsr"
     tr = sorted(p.name for p in (gsr / "train").glob("SNGS-*")) if (gsr / "train").is_dir() else []
     va = sorted(p.name for p in (gsr / "valid").glob("SNGS-*")) if (gsr / "valid").is_dir() else []
-    JT.train(Path(a.root) / "sources" / "soccernet-jersey" / "train.zip", HUB / "models", epochs=a.epochs, frames=a.frames,
+    jz = Path(a.root) / "sources" / "soccernet-jersey"
+    zips = [p for p in (jz / "train.zip", jz / "test.zip") if p.exists()]
+    JT.train(zips, HUB / "models", epochs=a.epochs, frames=a.frames,
              say=say, gsr_root=gsr, gsr_train=tr, gsr_valid=va)          # never the exam (test) split
 
 
@@ -441,8 +455,11 @@ def cmd_capture(a):
             md = Path(a.root) / "matches" / m
         if not (md / "pack.ghp.json").exists():
             raise SystemExit(f"no pack.ghp.json in {m} (pass a match folder or a match id under {Path(a.root) / 'matches'})")
-        r = K.capture(md, out, seg_min=a.segment_min)
-        say(f"{r['match_id']}: run {r['run_id']} -> {out}  " + ", ".join(f"{k} {v}" for k, v in r["rows"].items()))
+        r = K.capture(md, out, seg_min=a.segment_min, force=a.force)
+        if r.get("skipped"):
+            say(f"{r['match_id']}: unchanged (run {r['run_id']} already captured; current)")
+        else:
+            say(f"{r['match_id']}: run {r['run_id']} -> {out}  " + ", ".join(f"{k} {v}" for k, v in r["rows"].items()))
 
 
 def cmd_clips(a):
@@ -666,6 +683,17 @@ def main(argv=None):
                         "(estimated, det 0); default match id video-<clip>-persist")
     s.set_defaults(fn=cmd_track)
 
+    s = sub.add_parser("space", help="models 2 + 3: team control, reception zones, empty space (capture team_maps/team_stats)")
+    s.add_argument("match", nargs="+", help="match folders or ids (the threat grid is learned from all of them)")
+    s.add_argument("--force", action="store_true")
+    s.set_defaults(fn=cmd_space)
+
+    s = sub.add_parser("choice", help="model 1: which option each player tends to choose (fit on decisions.json)")
+    s.add_argument("match", nargs="+", help="training matches (folders or ids with decisions.json)")
+    s.add_argument("--test", nargs="*", help="held-out matches to score")
+    s.add_argument("--out", help="model JSON (default models/choice_model.json)")
+    s.set_defaults(fn=cmd_choice)
+
     s = sub.add_parser("options", help="chess-style option engine: top options per decision + grade of the choice")
     s.add_argument("match", nargs="+", help="match folders or ids (xT is learned from all of them)")
     s.set_defaults(fn=cmd_options)
@@ -689,6 +717,7 @@ def main(argv=None):
     s.add_argument("match", nargs="+", help="match folder(s) or id(s) under <root>/matches")
     s.add_argument("--out", help="capture folder (default <root>/capture)")
     s.add_argument("--segment-min", type=int, default=5, help="minute bins per period (0 = only match and halves)")
+    s.add_argument("--force", action="store_true", help="capture again even if this exact run exists")
     s.set_defaults(fn=cmd_capture)
 
     s = sub.add_parser("clips", help="event-centred training clips from a labelled clip")

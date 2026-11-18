@@ -2,7 +2,9 @@
 
     python tools/galileo.py capture datasets/matches/<match>        [--out <capture dir>] [--segment-min 5]
 
-Writes one Parquet file per table and run (appending; nothing is ever overwritten):
+Writes one Parquet file per table and run (appending; nothing is ever overwritten). The run id is deterministic
+(pack + code + settings + schema): re-running an unchanged capture is skipped. current_runs.json names each
+match's current run; read through current_view() so older runs never double-count:
   <out>/runs/       one row per capture run: match, source, pack sha256, code commit, settings
   <out>/frames/     per frame and player: t, period, x, y, provenance (seen | estimated), speed (tracked only)
   <out>/stats/      per segment and player (and team): counter, value, unit, provenance
@@ -23,7 +25,6 @@ import datetime as dt
 import hashlib
 import json
 import subprocess
-import uuid
 from pathlib import Path
 
 import numpy as np
@@ -35,7 +36,7 @@ SPEED_BANDS = [("walk", 0.0, 2.0), ("jog", 2.0, 4.0), ("run", 4.0, 5.5), ("high_
 SPRINT_M_S, SPRINT_MIN_S = 7.0, 1.0
 ACCEL_M_S2, ACCEL_MIN_S = 2.5, 0.5
 CELL_M = 2.0
-SCHEMA_VERSION = 2          # 2: movement_runs table + run counters (derived:movement)
+SCHEMA_VERSION = 3          # 2: movement_runs table + run counters; 3: deterministic run_id + current_runs.json
 JUMP_M_S = 12.0              # frame-to-frame faster than this is a tracking jump, not running
 TOP_SPEED_WINDOW_S = 1.0     # top speed = best sustained speed over this window
 
@@ -127,8 +128,47 @@ def _git_commit(hub):
         return None
 
 
-def capture(match_dir, out_dir, *, seg_min=5, hub=None):
-    """Capture one match folder (pack.ghp.json + match.json). -> dict with run_id and row counts."""
+CODE_FILES = ("capture.py", "runs.py", "pack.py")     # the code a capture run depends on (hashed into run_id)
+
+
+def run_key(pack_path, seg_min, code_dir=None):
+    """Deterministic run id: sha256 of the pack's bytes, the capture code, the settings and the schema version.
+    Same inputs -> same id (a re-run is recognised and skipped); any change -> a new id. -> (run_id, parts)."""
+    code_dir = Path(code_dir) if code_dir else Path(__file__).resolve().parent
+    h_pack = hashlib.sha256(Path(pack_path).read_bytes()).hexdigest()
+    h_code = hashlib.sha256(b"".join((code_dir / f).read_bytes() for f in CODE_FILES if (code_dir / f).exists())).hexdigest()
+    settings = json.dumps({"seg_min": seg_min, "short_gap_s": SHORT_GAP_S, "bands": SPEED_BANDS, "sprint": [SPRINT_M_S, SPRINT_MIN_S],
+                           "accel": [ACCEL_M_S2, ACCEL_MIN_S], "cell_m": CELL_M, "jump": JUMP_M_S, "top": TOP_SPEED_WINDOW_S},
+                          sort_keys=True)
+    rid = hashlib.sha256(f"{h_pack}|{h_code}|{settings}|{SCHEMA_VERSION}".encode()).hexdigest()[:16]
+    return rid, {"pack_sha256": h_pack, "code_sha256": h_code, "settings": settings}
+
+
+CURRENT = "current_runs.json"
+
+
+def current_runs(out_dir):
+    """{match_id: run_id} of the current capture per match (control file next to the tables)."""
+    f = Path(out_dir) / CURRENT
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def current_view(out_dir, table):
+    """SQL (DuckDB) that reads only the current run of every match from a capture table:
+        duckdb.sql(current_view('datasets/capture', 'stats'))"""
+    out = Path(out_dir).as_posix()
+    cur = current_runs(out_dir)
+    ids = ", ".join(f"'{r}'" for r in cur.values()) or "''"
+    return f"select * from read_parquet('{out}/{table}/*.parquet', union_by_name=true) where run_id in ({ids})"
+
+
+def capture(match_dir, out_dir, *, seg_min=5, hub=None, force=False):
+    """Capture one match folder (pack.ghp.json + match.json). -> dict with run_id and row counts.
+    The run id is deterministic (run_key); an existing identical run is skipped unless force. The new run becomes
+    the match's current run (current_runs.json); older runs stay on disk and drop out of current_view."""
     import pyarrow as pa
     import pyarrow.parquet as pq
     match_dir, out_dir = Path(match_dir), Path(out_dir)
@@ -138,7 +178,13 @@ def capture(match_dir, out_dir, *, seg_min=5, hub=None):
     man = json.loads((match_dir / "match.json").read_text(encoding="utf-8")) if (match_dir / "match.json").exists() else {}
     meta = pack.get("meta") or {}
     match_id = meta.get("match_id") or man.get("id") or match_dir.name
-    run_id = uuid.uuid4().hex[:12]
+    run_id, key_parts = run_key(pack_path, seg_min)
+    cur = current_runs(out_dir)
+    if not force and (Path(out_dir) / "runs" / f"{match_id}__{run_id}.parquet").exists():
+        if cur.get(match_id) != run_id:                       # identical run already on disk: just make it current
+            cur[match_id] = run_id
+            Path(out_dir, CURRENT).write_text(json.dumps(cur, indent=1, sort_keys=True), encoding="utf-8")
+        return {"run_id": run_id, "match_id": match_id, "rows": {}, "out": str(out_dir), "skipped": True}
     fps = float(d["fps"])
     dt_s = 1.0 / fps
     n, nP = int(d["n"]), int(d["nP"])
@@ -251,7 +297,7 @@ def capture(match_dir, out_dir, *, seg_min=5, hub=None):
     hub = Path(hub) if hub else Path(__file__).resolve().parents[2]
     run = {"run_id": [run_id], "match_id": [match_id], "created": [dt.datetime.now().isoformat(timespec="seconds")],
            "schema_version": [SCHEMA_VERSION], "source": [meta.get("source") or man.get("source")],
-           "pack": [str(pack_path)], "pack_sha256": [hashlib.sha256(pack_path.read_bytes()).hexdigest()],
+           "pack": [str(pack_path)], "pack_sha256": [key_parts["pack_sha256"]], "code_sha256": [key_parts["code_sha256"]],
            "code_commit": [_git_commit(hub)], "persistent": [bool(meta.get("persistent"))],
            "settings": [json.dumps({"seg_min": seg_min, "short_gap_s": SHORT_GAP_S, "bands": SPEED_BANDS,
                                     "sprint": [SPRINT_M_S, SPRINT_MIN_S], "accel": [ACCEL_M_S2, ACCEL_MIN_S], "cell_m": CELL_M})],
@@ -270,4 +316,7 @@ def capture(match_dir, out_dir, *, seg_min=5, hub=None):
         d_.mkdir(exist_ok=True)
         pq.write_table(table, d_ / f"{match_id}__{run_id}.parquet")
         counts[name] = table.num_rows
-    return {"run_id": run_id, "match_id": match_id, "rows": counts, "out": str(out_dir)}
+    cur = current_runs(out_dir)
+    cur[match_id] = run_id
+    (out_dir / CURRENT).write_text(json.dumps(cur, indent=1, sort_keys=True), encoding="utf-8")
+    return {"run_id": run_id, "match_id": match_id, "rows": counts, "out": str(out_dir), "skipped": False}

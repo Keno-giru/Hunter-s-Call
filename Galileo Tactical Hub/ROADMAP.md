@@ -210,3 +210,44 @@ Dated, scoped verdicts with numbers. Newest last.
   Bundesliga percentiles of loss (best top 25% ... blunder worst 3%); brilliant = best + >= 2 opponents bypassed
   + >= 0.02 over the safest pass. Known weakness: crosses into a crowded box rated too likely to arrive (needs
   per-type calibration). Grades are a model's opinion, unvalidated against coaches. tests/py/test_options.py 16/16.
+- 2026-11-18, jersey reader precision (Keno: "improve the % first"): decision rule = full probability mass per
+  readable frame (not argmax), readable >= 0.9, numbers unique per team (Hungarian), share >= 0.3, >= 5 frames of
+  evidence. v2 on unseen games (GSR valid): 45% -> 84% precision (25/97 people). v3 = v2 recipe + SN-Jersey test
+  split (more games), epoch chosen on GSR valid: 46/97 people at 83% (every 10th frame), or 25/97 at 92% with
+  share >= 0.5. EXAM CONTAMINATION: v3's exam (GSR test) scores jumped to 98-100% because the SN-Jersey test split
+  is cut from SoccerNet test videos, the same games as eval/real. Exam scores of anything using this reader are
+  contaminated and are not reported; detection/tracking exam use (no reader) is unaffected. Recorded in
+  models/jersey_resnet18.json.
+- 2026-11-18, capture fix (research report's first defect): run_id is now deterministic (sha256 of the pack bytes,
+  capture/runs/pack code, settings, schema version 3); an unchanged re-run is skipped; current_runs.json names
+  each match's current run and capture.current_view() reads only those (old runs stay on disk, append-only).
+  Metrica had three runs on disk (7,863 movement_runs rows); the current view counts 2,621. All 11 matches
+  captured incl. the 7 IDSSE Bundesliga matches: median outfield distance 9.2-10.7 km, top speeds median
+  8.0-8.6 m/s (max 9.9), ~96 runs per player per match (20% served, 42% unserved, 4% decoy, 4% in behind).
+  Known: sprints low (6-9/match) under our 7 m/s for 1 s on smoothed speed (stricter than SkillCorner's > 25 km/h
+  for 0.7 s); possession from ball proximity reads Koeln v Bayern 47/53 - use provider events where they exist.
+  tests/py/test_capture.py 14/14.
+- 2026-11-18, sandbox model 1 (Keno's sandbox idea: 1 player decisions/movement, 2 team control/coverage,
+  3 empty space, then a pitch where AI players act): tools/galileo_data/choice.py, `galileo.py choice`.
+  Conditional logit over the option engine's listed options (passes to each team-mate, shot; carries are not
+  choices in event data) with features value, P(keep), forward metres, length, backward, shot, bypassed,
+  receiver openness, passing partnership (leak-free: counted from other matches), each also x pressure on the
+  carrier; per-player deviations shrunk toward the average (L2). Held out (fit 5 IDSSE matches, test 2): 27.1%
+  first-choice right, 62.4% top-3, log-loss 1.973 vs uniform 9.1% / 2.398, nearest team-mate 24.3%. Player
+  styles add little yet (16 of 49 test players seen in training): needs more matches per player. A first
+  partner feature leaked (counts included the decision itself: test fell to 23.7%); fixed. Style read-out on all
+  7 matches: Bayern's Upamecano and Pavard keep playing forward when pressed; Duesseldorf's forwards lay it back;
+  role confounds this (compare within position next). Options now carry forward_m, length_m, open_m, and each
+  decision pressure_m, ball position and the chosen listed option. test_options 17/17.
+- 2026-11-18, sandbox models 2 + 3 (tools/galileo_data/space.py, `galileo.py space`): pitch control on a 21 x 14
+  grid once per second (arrival times as in the option engine, logistic spread 0.6 s), averaged per team in its
+  attacking frame with and without the ball; possession phases from provider events where available (first
+  version used ball proximity and blurred the phases: in- and out-of-possession maps looked alike). Reception
+  maps + zone shares from completed passes. Empty space = owned (>= 0.6) cells with no team-mate within 6 m,
+  weighted by xT; attacking runs ending in such cells. Stored as capture tables team_maps / team_stats with
+  deterministic run ids and current_space_runs.json. Koeln v Bayern: in possession a team controls ~60% of the
+  pitch and ~36% of the opponent half (out of possession ~40% / ~17%); possession 52/48 by events; Bayern's
+  receptions mostly in their own half (CB circulation), Koeln more direct (23% vs 15% received in the final
+  third). Runs into empty space: 42-56% of attacking runs per team across 9 matches. A silent failure (pandas
+  missing, swallowed by try/except) left that stat empty at first; fixed, errors no longer hidden.
+  tests/py/test_space.py 6/6.

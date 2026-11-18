@@ -74,7 +74,18 @@ def main():
         check("frames carry provenance seen / estimated", [p[0] for p in prov] == ["estimated", "seen"], str(prov))
         r2 = K.capture(md, out, seg_min=0)
         runs = duckdb.sql(f"select count(*) from '{(out / 'runs' / '*.parquet').as_posix()}'").fetchone()[0]
-        check("a second capture appends a new run, never overwrites", runs == 2 and r2["run_id"] != r["run_id"])
+        check("same input -> same run id, skipped (no duplicate run)", r2["skipped"] and r2["run_id"] == r["run_id"] and runs == 1,
+              f"{r2.get('skipped')} {runs}")
+        # change the input (the pack): a new run, the old one stays on disk, the current view sees only the new one
+        pk = json.loads((md / "pack.ghp.json").read_text())
+        pk["meta"]["note"] = "changed"
+        (md / "pack.ghp.json").write_text(json.dumps(pk))
+        r3 = K.capture(md, out, seg_min=0)
+        runs = duckdb.sql(f"select count(*) from '{(out / 'runs' / '*.parquet').as_posix()}'").fetchone()[0]
+        check("changed input -> new run id, old run kept (append-only)", not r3["skipped"] and r3["run_id"] != r["run_id"] and runs == 2)
+        cur_dist = duckdb.sql(K.current_view(out, "stats") + " and counter = 'distance_m' and player_id = 'h1' and segment = 'match'").fetchall()
+        check("current view counts only the current run (no double counting)", len(cur_dist) == 1 and K.current_runs(out)["cap-test"] == r3["run_id"],
+              str(len(cur_dist)))
     # a glitch jump must not create a top speed
     pos = np.zeros((50, 1, 2)); pos[25:, 0, 0] = 30
     v, _ = K.speeds(pos, np.ones((50, 1), bool), 10)

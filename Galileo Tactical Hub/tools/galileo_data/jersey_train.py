@@ -108,6 +108,13 @@ def targets(num):
     return 1, (num // 10) if num >= 10 else 10, num % 10
 
 
+class _MultiZip:
+    """Reads a frame name from the zip its tracklet came from (decode(z, (key, name)))."""
+
+    def __init__(self, zmap):
+        self.zmap = zmap
+
+
 def build_arrays(z, gt, frames, ids, per_track, rng):
     X, Y, T = [], [], []
     for tid in ids:
@@ -117,7 +124,7 @@ def build_arrays(z, gt, frames, ids, per_track, rng):
         pick = rng.sample(names, min(per_track, len(names)))
         r, te, un = targets(gt[tid])
         for n in pick:
-            X.append(decode(z, n))
+            X.append(decode(z.zmap[tid] if isinstance(z, _MultiZip) else z, n))
             Y.append((r, te, un))
             T.append(tid)
     return np.stack(X), np.array(Y, np.int64), np.array(T)
@@ -180,14 +187,22 @@ def track_accuracy(model, X, Y, T, device, batch=512):
 
 
 def train(zip_path, out_dir, *, epochs=12, frames=24, val_frames=40, batch=128, lr=3e-4, seed=0, say=print,
-          gsr_root=None, gsr_train=(), gsr_valid=()):
+          gsr_root=None, gsr_train=(), gsr_valid=(), keep_epochs=True):
     import torch
     import torch.nn.functional as F
     rng = random.Random(seed)
     torch.manual_seed(seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    z, gt, fr = load_tracklets(zip_path)
-    ids = sorted(gt, key=lambda x: int(x) if x.isdigit() else x)
+    # one or more SN-Jersey zips (train, test): tracklet ids are prefixed per zip; frames are read from their own zip
+    zips = [zip_path] if isinstance(zip_path, (str, Path)) else list(zip_path)
+    gt, fr, zmap = {}, {}, {}
+    for zi, zp in enumerate(zips):
+        zz, g1, f1 = load_tracklets(zp)
+        for k, v in g1.items():
+            key = f"{zi}:{k}"
+            gt[key], fr[key], zmap[key] = v, f1.get(k, []), zz
+    z = _MultiZip(zmap)
+    ids = sorted(gt)
     rng.shuffle(ids)
     nval = max(20, len(ids) // 10)
     val_ids, tr_ids = ids[:nval], ids[nval:]
@@ -237,6 +252,8 @@ def train(zip_path, out_dir, *, epochs=12, frames=24, val_frames=40, batch=128, 
             key = acc["number_accuracy"]
         hist.append(row)
         say(json.dumps(row))
+        if keep_epochs:
+            torch.save(model.state_dict(), out_dir / f"jersey_ep{ep + 1:02d}.pt")
         if key > best:
             best, best_ep = key, ep + 1
             torch.save(model.state_dict(), out_dir / "jersey_resnet18.pt")

@@ -215,7 +215,9 @@ def evaluate_match(d, xt, dirs, fps):
             v_lose = xt_at(xt, *(-A(tgt)))                           # opponents attack the other way
             val = p * v_keep - (1 - p) * v_lose - xt_ball
             return {"kind": kind, "player": who, "x": round(float(tgt[0]), 1), "y": round(float(tgt[1]), 1),
-                    "p_keep": round(p, 3), "value": round(val, 4), "bypassed": bypassed(ball, tgt, def_xy, sgn)}
+                    "p_keep": round(p, 3), "value": round(val, 4), "bypassed": bypassed(ball, tgt, def_xy, sgn),
+                    "forward_m": round(float((tgt[0] - ball[0]) * sgn), 1), "length_m": round(float(np.hypot(*(tgt - ball))), 1),
+                    "open_m": round(float(np.hypot(*(def_xy - tgt).T).min()), 1) if len(def_xy) else 99.0}
         for c in mates:
             tgt = pos[k, c] + vel[k, c] * LEAD_S
             opts.append(score_target(tgt, "pass", players[c]["id"]))
@@ -223,8 +225,19 @@ def evaluate_match(d, xt, dirs, fps):
         opts.append(score_target(carry, "carry"))
         sx = xg(*A(ball))
         opts.append({"kind": "shot", "player": None, "x": round(52.5 * sgn, 1), "y": 0.0, "p_keep": None,
-                     "value": round(sx - xt_ball, 4), "bypassed": 0})
+                     "value": round(sx - xt_ball, 4), "bypassed": 0, "forward_m": round(float(52.5 - ball[0] * sgn), 1),
+                     "length_m": round(float(np.hypot(52.5 * sgn - ball[0], ball[1])), 1), "xg": round(sx, 4)})
         opts.sort(key=lambda o: -o["value"])
+        # context for the choice model: pressure on the ball carrier, and which listed option was taken
+        pressure = float(np.hypot(*(def_xy - ball).T).min()) if len(def_xy) else 99.0
+        chosen_idx = None
+        if e["type"] == "shot":
+            chosen_idx = next(i for i, o in enumerate(opts) if o["kind"] == "shot")
+        elif e.get("x_end") is not None:
+            end = np.array([e["x_end"], e["y_end"]], float)
+            dpass = [(float(np.hypot(o["x"] - end[0], o["y"] - end[1])), i) for i, o in enumerate(opts) if o["kind"] == "pass"]
+            if dpass and min(dpass)[0] <= 8.0:               # the pass went to (or near) this team-mate
+                chosen_idx = min(dpass)[1]
         if e["type"] == "shot":
             chosen = dict(next(o for o in opts if o["kind"] == "shot"))
         elif e.get("x_end") is not None:
@@ -238,6 +251,8 @@ def evaluate_match(d, xt, dirs, fps):
         out.append({"frame": int(frame_no[k]), "i": k, "period": per, "t": round(float(d["t"][k]), 2), "team": team,
                     "player": players[me]["id"], "type": e["type"], "outcome": e.get("subtype"),
                     "options": opts[:5], "chosen": chosen, "rank": rank, "loss": round(loss, 4),
+                    "all_options": opts, "chosen_option": chosen_idx, "pressure_m": round(pressure, 1),
+                    "ball_x": round(float(ball[0] * sgn), 1), "ball_y": round(float(ball[1] * sgn), 1),
                     "grade": grade(loss, rank == 1, chosen.get("bypassed", 0), chosen["value"] - safe["value"])})
     return out
 
