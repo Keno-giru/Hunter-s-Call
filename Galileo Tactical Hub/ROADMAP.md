@@ -304,3 +304,19 @@ Dated, scoped verdicts with numbers. Newest last.
   the new moment), re-reads started during a step are dropped, drags during a step are ignored, option rows take
   Enter only (Space stays the hub's play key), the ball follows a taker dragged off the restart spot.
   tests/py/test_rules.py 24/24, test_sandbox.py 14/14; T0 PASS 11/11.
+- 2026-11-18, live match simulator, build steps 1-3 (tools/galileo_data/sim.py, `galileo.py sim fit|play|check`,
+  maths in docs/LIVE_MATCH_SIM.md): two base AIs play a full match on one replayable timeline (seeded), written as
+  a hub pack. Shape: per role slot (the DFL 4-2-3-1 labels, generic labels matched by position) and phase, a linear
+  function of the ball fitted on 7 DFL matches (~1.7 M positions; R2 0.3-0.58 per axis, held-out mean 0.33; a
+  12x8 ball-zone lookup only reached 0.37), spread restored (x1.12 long, x1.32 wide: least squares shrinks teams).
+  Play: damped-spring movement with speed limits, pressing (2 nearest), marking (Hungarian, goal-side), attacking
+  runs behind the line, carrier timing by pressure hazard, choice model over the option engine's options, pass
+  outcomes drawn with the engine's calibrated P(keep), misplaced balls off line and overhit, tackles (foul / loose /
+  won), clearances, shots only from xG >= 0.03 with real outcome shares, set pieces load the box, referee in the
+  loop (offside, ball out, fouls, penalties, restarts with real dead time). A 90-minute match takes ~8 s.
+  Realism (4 x 90 min vs the 7 DFL matches): passes 756-818 (real 820 +- 79), fouls 16-28 (22 +- 4), ball-outs
+  44-60 (65 +- 6), pass gap 3.5 s (2.9); gaps: shots 9-11 (23), goals ~1.3 (2.6), completion 83-84% (78%), pass
+  length 16.5 m (20.1) - the AI creates too few chances and plays too safe (no crosses, no second balls, defending
+  easier to play through than real). Parameters from random search (2 seeds x 30 min per setting), first fit.
+  Next: crosses + second balls, then rollouts + live predictions (step 4) and observer controls (step 5).
+  tests/py/test_sim.py 12/12; T0 PASS 11/11.

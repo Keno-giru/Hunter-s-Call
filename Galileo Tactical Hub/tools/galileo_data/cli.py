@@ -429,6 +429,45 @@ def cmd_archetypes(a):
             say(f"{ref:18s} {sim:.2f}{' (thin)' if thin else ''}  shared: {', '.join(drive)}")
 
 
+def cmd_sim(a):
+    import json
+    from . import sim as SM
+    from . import choice as CH
+    from .dataset import build_catalog, write_match
+    real = sorted((Path(a.root) / "matches").glob("idsse-*"))
+    shape_path = HUB / "models" / "sim_shape.json"
+    if a.action == "fit":
+        shape = SM.fit_shape(real, say=say)
+        shape_path.write_text(json.dumps(shape, indent=1), encoding="utf-8")
+        return say(f"shape model -> {shape_path}")
+    shape = json.loads(shape_path.read_text(encoding="utf-8"))
+    src = Path(a.root) / "matches" / a.source
+    xt = json.loads((src / "decisions.json").read_text(encoding="utf-8"))["xt"]
+    cm = json.loads((HUB / "models" / "choice_model.json").read_text(encoding="utf-8"))
+    pairs = CH.pair_counts(real)
+    lineup = SM.lineup_from(src, shape)
+    if a.action == "check":
+        say("real (mean, sd): " + json.dumps(SM.real_stats(real)))
+        for seed in range(1, a.matches + 1):
+            m = SM.Match(shape, xt, cm, lineup, seed=seed, minutes=90, pairs=pairs).run()
+            st = SM.match_stats(m.events, 90)
+            st["pass_gap_s_median"] = st.pop("pass_gap_frames_median") * SM.DT
+            say(f"sim seed {seed}: score {m.score['home']}-{m.score['away']}  " + json.dumps(st))
+        return
+    m = SM.Match(shape, xt, cm, lineup, seed=a.seed, minutes=a.minutes, pairs=pairs).run()
+    meta = json.loads((src / "pack.ghp.json").read_text(encoding="utf-8"))["meta"]
+    mid = f"sim-{a.source}-s{a.seed}"
+    meta = {"pitch": [105.0, 68.0], "home": meta["home"], "away": meta["away"], "source": "galileo-sim", "match_id": mid,
+            "frame": "metres, centre origin, y up", "units_scale": 0.1,
+            "note": f"Simulated by two base AIs (tools/galileo_data/sim.py), line-ups and styles from {a.source}; not a real match."}
+    pack = m.to_pack(meta)
+    write_match(a.root, mid, pack, source="galileo-sim", licence="generated (shape fitted on DFL data, CC-BY-4.0)",
+                attribution="Galileo simulator; shape and styles fitted on IDSSE / DFL data (CC-BY-4.0)")
+    build_catalog(a.root)
+    say(f"{a.minutes:.0f} min simulated, {m.score['home']}-{m.score['away']}, {len(m.events)} events")
+    say(f"open: http://localhost:8000/index.html?pack={Path(a.root).name}/matches/{mid}/pack.ghp.json")
+
+
 def cmd_choice(a):
     from . import choice as CH
     res = lambda ms: [Path(m) if (Path(m) / "decisions.json").exists() else Path(a.root) / "matches" / m for m in ms]  # noqa: E731
@@ -704,6 +743,14 @@ def main(argv=None):
     s.add_argument("match", nargs="+", help="match folders or ids (the threat grid is learned from all of them)")
     s.add_argument("--force", action="store_true")
     s.set_defaults(fn=cmd_space)
+
+    s = sub.add_parser("sim", help="live match simulator: fit team shape, play a match into the hub, check realism")
+    s.add_argument("action", choices=["fit", "play", "check"])
+    s.add_argument("--minutes", type=float, default=90.0)
+    s.add_argument("--seed", type=int, default=1)
+    s.add_argument("--source", default="idsse-J03WPY", help="real match giving the line-ups, styles and xT grid")
+    s.add_argument("--matches", type=int, default=3, help="check: simulated matches to compare")
+    s.set_defaults(fn=cmd_sim)
 
     s = sub.add_parser("archetypes", help="reference-player fingerprints (StatsBomb open data, research use only)")
     s.add_argument("action", choices=["fetch", "build", "like"])

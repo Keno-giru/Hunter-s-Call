@@ -15,9 +15,9 @@ PASS local edits are stored per video path  [['galileo.hub.footage.clip:/dataset
 PASS video-derived pack loads  [{"src": "video", "nP": 40}]
 PASS video pack shares the clip's clock  [frame 69.99999868870047, video 5.600 s]
 PASS missing ?pack= falls back to the sample
-PASS library page links matches and clips  [18 links]
+PASS library page links matches and clips  [19 links]
 PASS no page errors
 
 19/19 gates passed
-127.0.0.1 - - [18/Nov/2026 02:05:59] "GET /favicon.ico HTTP/1.1" 404 -
-127.0.0.1 - - [18/Nov/2026 02:06:03] "GET /datasets/nope.ghp.json HTTP/1.1" 404 -
+127.0.0.1 - - [18/Nov/2026 03:07:30] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [18/Nov/2026 03:07:34] "GET /datasets/nope.ghp.json HTTP/1.1" 404 -
